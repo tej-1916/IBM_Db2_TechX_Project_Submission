@@ -82,8 +82,8 @@ CivicLens AI combines a relational system of record in IBM Db2 with an AI invest
 ## Setup & Installation
 ```bash
 cd submissions/civiclens-ai
-python -m venv .venv
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
+python -m venv ~/.venvs/civiclens    # keep the virtualenv OUTSIDE this folder (see the note under Configuration)
+source ~/.venvs/civiclens/bin/activate   # Windows: %USERPROFILE%\.venvs\civiclens\Scripts\activate
 pip install -r src/backend/requirements-dev.txt
 (cd src/frontend && npm ci)          # dashboard dependencies
 ```
@@ -94,7 +94,7 @@ cp .env.example .env                 # then set DB2_PASSWORD to a strong local p
 ```
 `.env` is gitignored. Every setting can also be supplied as a process environment variable, or via `CIVICLENS_ENV_FILE=/path/to/file`.
 
-> **Note:** the official `scripts/validate_submission.py` fails if any file named `.env` exists inside the submission folder, even an untracked one. Before running it, move your secrets file out (`CIVICLENS_ENV_FILE`) or delete it.
+> **Note:** the official `scripts/validate_submission.py` walks the whole submission folder, even untracked files, and fails if it finds a file named `.env` or any `*.pem`, `*.key`, `*.pfx` or `*.p12` file, **including inside a virtualenv** (`certifi/cacert.pem`) or `node_modules`. That is why the virtualenv above lives outside the folder. Before running the validator, also move your secrets file out (`CIVICLENS_ENV_FILE`) or delete it. CI validates a clean checkout, so it is not affected.
 
 > **Security warning:** never commit `.env`, real passwords or API keys.
 
