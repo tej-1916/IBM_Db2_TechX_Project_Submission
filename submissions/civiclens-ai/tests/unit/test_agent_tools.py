@@ -83,3 +83,13 @@ def test_failures_are_audited_and_not_leaked():
 def test_not_found_is_structured():
     out = tools_by_name(FakeRepo())["get_complaint"].invoke({"complaint_id": 99})
     assert out["data"] == {"found": False, "complaint_id": 99}
+
+
+def test_audit_summaries_are_one_readable_line():
+    from civiclens.agent.tools import summarise_result
+
+    assert summarise_result([1, 2, 3]) == "3 rows"
+    assert summarise_result({"found": False, "complaint_id": 9}) == "complaint #9 not found"
+    long = {"complaint_id": 5, "category": "POTHOLE", "description": "x" * 5000}
+    assert summarise_result(long) == "complaint #5 (POTHOLE) returned"  # complaint text is never dumped
+    assert len(summarise_result({"k": "v" * 1000})) <= 300

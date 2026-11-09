@@ -1,0 +1,9 @@
+# Official submission validator | 2026-11-09T17:02:10Z | python3 scripts/validate_submission.py submissions/civiclens-ai (run from the repository root; the script is not modified)
+Validating 1 submission folder(s)...
+
+Checking: submissions/civiclens-ai
+  ✅ PASSED all validation checks.
+
+==================================================
+ALL VALIDATION CHECKS PASSED.
+(exit code 0)

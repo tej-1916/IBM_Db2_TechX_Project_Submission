@@ -2,7 +2,7 @@
 
 > **One-line pitch:** An agentic investigation platform for city infrastructure complaints. IBM Db2 stores every complaint, finds duplicates with in-database geo-distance queries, identifies hotspots, and keeps an auditable record of every AI tool call and human decision.
 
-> **Status: Phase 01A.** Investigation API, evidence-grounded recommendations, authenticated human review with atomic Db2 transactions, a bounded LangChain agent, and a clearly labelled rule-based fallback are implemented and verified against a live IBM Db2 12.1 server. **The LLM path has not yet been run against a real hosted model** (no credentials were available), so every recommendation produced so far is labelled `DETERMINISTIC_FALLBACK`. The React dashboard is planned for Phase 01B. See [`docs/PHASE_00_REPORT.md`](docs/PHASE_00_REPORT.md) and [`docs/PHASE_01A_REPORT.md`](docs/PHASE_01A_REPORT.md).
+> **Status: Phase 01B.** On top of the verified IBM Db2 + FastAPI backend there is now a React/TypeScript **intelligence dashboard**: overview, map (Leaflet + OpenStreetMap), complaint browser, investigation workspace, authenticated human review and an agent-transparency page. It was driven end to end in a real browser against the real backend and IBM Db2 (see [Testing](#testing--verification) and the [screenshots](docs/screenshots/README.md)). **The LLM path has still not been run against a real hosted model** (no provider credentials exist in this environment; verification is **BLOCKED**), so every recommendation is labelled `DETERMINISTIC_FALLBACK` or `MANUAL`, and the UI says "Rule-based · no LLM" wherever that is the case. See [`docs/PHASE_01B_REPORT.md`](docs/PHASE_01B_REPORT.md), [`docs/PHASE_01A_REPORT.md`](docs/PHASE_01A_REPORT.md) and [`docs/PHASE_00_REPORT.md`](docs/PHASE_00_REPORT.md).
 
 ---
 
@@ -31,9 +31,9 @@
 ## Solution Overview
 CivicLens AI combines a relational system of record in IBM Db2 with an AI investigator that can only use **audited, allow-listed tools**:
 
-| Capability | Phase 00 status |
+| Capability | Status |
 |---|---|
-| Complaint ingestion API with validation | ✅ Implemented, verified on Db2 |
+| Complaint ingestion API with validation (analyst-only since Phase 01B) | ✅ Implemented, verified on Db2 |
 | IBM Db2 schema, migrations, parameterized data access | ✅ Implemented, verified on Db2 |
 | Duplicate detection (Db2 haversine distance + time window + text similarity) | ✅ Implemented, verified on Db2 |
 | Geo-temporal hotspot analysis (Db2 `GROUP BY` geo-cell × category) | ✅ Implemented, verified on Db2 |
@@ -44,8 +44,10 @@ CivicLens AI combines a relational system of record in IBM Db2 with an AI invest
 | Human review: approve / reject, atomic, no double decisions, self-review blocked | ✅ Verified on Db2 incl. a concurrency test |
 | Bounded LangChain agent (allow-list, step limit, timeout) | ✅ Loop verified with a scripted test double; ⚠️ **not yet run against a real LLM provider** |
 | Rule-based fallback (labelled "NO LLM") | ✅ Verified on Db2 |
-| Interactive dashboard and map (React/Vite/Tailwind) | ⏳ Phase 01–02 |
-| Playwright end-to-end tests | ⏳ Phase 02 |
+| Interactive dashboard: overview, map, complaints, investigation workspace, human review, agent transparency (React/TypeScript/Vite/Tailwind) | ✅ Built and exercised in a real browser against the real backend and Db2 |
+| Honest provenance: every recommendation shows its stored generator (LLM / rule-based / manual) | ✅ One wording function, unit-tested; rule-based output is never presented as AI |
+| Playwright end-to-end tests (production build, real backend + Db2, axe-core accessibility, responsive checks) | ✅ 63 tests passing |
+| Real hosted-LLM run | ⛔ **BLOCKED**: no provider credentials in this environment |
 
 ## IBM Db2 Integration
 - **Db2 edition and environment:** IBM Db2 Community Edition **12.1.5** in Docker (`icr.io/db2_community/db2`). The same code supports Db2 on Cloud over TLS (`DB2_SECURITY=SSL`); this has not yet been verified against a cloud instance.
@@ -68,11 +70,12 @@ CivicLens AI combines a relational system of record in IBM Db2 with an AI invest
 - **Backend:** Python 3.11+ (verified on 3.13), FastAPI, Pydantic v2, Uvicorn
 - **Database:** IBM Db2 (`ibm_db`)
 - **AI:** LangChain (`langchain-core`)
-- **Frontend (planned):** React, TypeScript, Vite, Tailwind CSS
-- **Quality:** Pytest, Ruff
+- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS v4, TanStack Query, zod (runtime response validation), Leaflet + OpenStreetMap, hand-built SVG charts
+- **Quality:** Pytest, Ruff, ESLint, Vitest + React Testing Library + MSW, Playwright + axe-core
 
 ## Prerequisites
 - Python ≥ 3.11 and `pip`
+- Node.js ≥ 22 and `npm` (for the dashboard)
 - Docker, with about 4 GB of RAM free, for local Db2 Community Edition. Alternatively, access to an existing Db2 instance.
 - Linux/macOS x86_64 or arm64, or Windows. The `ibm_db` wheel bundles the Db2 CLI driver (about 137 MB).
 
@@ -82,6 +85,7 @@ cd submissions/civiclens-ai
 python -m venv .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r src/backend/requirements-dev.txt
+(cd src/frontend && npm ci)          # dashboard dependencies
 ```
 
 ## Configuration
@@ -110,7 +114,20 @@ cd src/backend && uvicorn civiclens.api.main:app --port 8000
 
 # 4. Drive the full workflow over HTTP (prints a transcript; never prints tokens)
 python scripts/api_workflow_demo.py
+
+# 5. (optional) create a believable demo workflow THROUGH the real API: investigations in every state,
+#    rule-based and manual recommendations, decisions by two reviewers. Everything is labelled SYNTHETIC.
+python scripts/seed_demo_workflow.py
 ```
+
+### Running the dashboard
+```bash
+cd src/frontend
+npm run dev                  # http://127.0.0.1:5173, /api is proxied to http://127.0.0.1:8000
+# or a production-like run:
+npm run build && npm run verify:bundle && npm run preview     # http://127.0.0.1:4173
+```
+Open the app and sign in with a token from `CIVICLENS_AUTH_TOKENS` (an `analyst` token creates investigations; a `reviewer` token decides recommendations; nobody reviews their own investigation). Tokens are entered in the browser, kept for that tab only and sent only to the API; no token is in any committed file or in the built bundle. See [`src/frontend/README.md`](src/frontend/README.md) for configuration (`VITE_API_BASE_URL`, `CORS_ORIGINS`), the test commands and the design notes.
 
 ### Choosing the investigator: real LLM or rule-based fallback
 * `LLM_PROVIDER=none` (default): `mode=auto` uses the **rule-based fallback**. Every result says `generator: DETERMINISTIC_FALLBACK` and `NO LLM WAS USED`; `mode=llm` returns `409 LLM_NOT_CONFIGURED` instead of silently falling back.
@@ -119,9 +136,11 @@ python scripts/api_workflow_demo.py
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/health` | Liveness check (no database access) |
-| `GET /api/health/db` | Runs a real query against Db2 and returns the server version |
-| `POST /api/complaints` | Validates and stores a complaint, then returns duplicate candidates |
+| `GET /api/health` | Liveness only: `{"status":"ok"}` (no database access, no version or environment details) |
+| `GET /api/health/db` | Readiness: runs a real query against Db2; returns only `{"status":"ok"}` (failure is a generic `503`) |
+| `GET /api/me` | any user · the caller's id, role and capabilities (used by the UI to decide which controls to show) |
+| `GET /api/overview` | any user · every dashboard aggregate, computed in Db2 per request (counts, trends, provenance split, hotspot total, agent activity, system status) |
+| `POST /api/complaints` | **analyst** · validates and stores a complaint, then returns duplicate candidates (public in Phase 00; protected in Phase 01B) |
 | `GET /api/complaints` | Lists complaints, filtered by `category`, `status`, `ward`, `synthetic` and `limit` |
 | `GET /api/complaints/{id}` | Returns one complaint |
 | `GET /api/hotspots` | Geo-cell × category hotspots, filtered by `days`, `category`, `min_count` and `limit` |
@@ -131,36 +150,61 @@ python scripts/api_workflow_demo.py
 | `GET /api/investigations/{id}/audit` | any user · full audit history |
 | `GET /api/investigations/{id}/recommendations` · `POST …/recommendations` | any user read · **analyst** manual proposal |
 | `POST /api/investigations/{id}/run` | **analyst** · run the agent (`mode`: `auto` \| `llm` \| `fallback`) |
+| `GET /api/recommendations` | any user · the review queue across investigations (`status`, `limit`), each item with its stored generator |
 | `POST /api/recommendations/{id}/decision` | **reviewer** · `APPROVED` / `REJECTED` (reviewer = authenticated user) |
 
-Authentication is a static bearer token per user (`Authorization: Bearer …`) configured through `CIVICLENS_AUTH_TOKENS`; the complaint and hotspot endpoints from Phase 00 remain public. See [`architecture.md`](architecture.md#authentication--authorization).
+Authentication is a static bearer token per user (`Authorization: Bearer …`) configured through `CIVICLENS_AUTH_TOKENS`. The Phase 00 **read** endpoints for complaints and hotspots remain public (a documented gap to close before any public deployment, together with rate limiting and real identity). Set `APP_ENV=production` to stop serving `/docs` and `/openapi.json`. See [`architecture.md`](architecture.md#authentication--authorization).
 
 ## Testing & Verification
 ```bash
+# backend
 pytest                                        # unit tests (no database needed)
 CIVICLENS_DB2_TESTS=1 pytest                  # + live Db2 integration tests (needs the .env settings exported)
 CIVICLENS_LLM_TESTS=1 CIVICLENS_DB2_TESTS=1 pytest -m llm   # billable real-LLM test (opt-in)
 python src/backend/scripts/check_secrets.py --literal-from-env   # committed-secret scan
 python src/backend/scripts/db2_smoke_test.py  # end-to-end Db2 evidence → docs/evidence/
 ruff check . && ruff format --check .
+
+# frontend (cd src/frontend)
+npm run typecheck && npm run lint
+npm test                                      # Vitest: components, views, API client, auth, charts, security rules
+CIVICLENS_LIVE_API=http://127.0.0.1:8000 npm run test:live   # the real TS client against the real API + Db2
+npm run build && npm run verify:bundle        # production build + "no secret or DB identifier in the bundle"
+npm run e2e                                   # Playwright on the production build, real backend + Db2, axe-core, responsive
+npm run screenshots                           # regenerate docs/screenshots from the running app
+
 python ../../scripts/validate_submission.py .   # official validator (from repo root: submissions/civiclens-ai)
 ```
-The integration tests use **no mocks**: they insert, query, aggregate, roll back and audit against the configured Db2 server. Recorded output from a real run is in [`docs/evidence/`](docs/evidence/).
+The integration and end-to-end tests use **no mocks** for Db2: they insert, query, aggregate, roll back and audit against the configured Db2 server, and the browser tests drive the production build against the real API. Recorded output from real runs is in [`docs/evidence/`](docs/evidence/): backend `pytest` against live Db2 (138 passed, 1 skipped: the real-LLM test), the live API contract test (8 passed), the Playwright run (63 passed) and the component tests (245 passed). The real-LLM run is **BLOCKED** (no credentials); see [`docs/evidence/llm_verification.txt`](docs/evidence/llm_verification.txt).
 
 ## Screenshots & Demo
-- **Live demo:** not deployed yet. Public deployment needs approval and a hosted Db2 instance (see the Phase 00 report).
+- **Live demo:** not deployed yet. Public deployment needs approval, a hosted Db2 instance and the hardening listed under *Known Limitations*.
 - **Demo video:** not recorded yet.
-- **Recorded evidence:** [`docs/evidence/db2_smoke_test_result.json`](docs/evidence/db2_smoke_test_result.json), [`docs/evidence/pytest_live_db2.txt`](docs/evidence/pytest_live_db2.txt).
+- **Screenshots:** 28 genuine captures from the running app (production build, real backend, real Db2, real OpenStreetMap tiles; synthetic data, labelled) are indexed in [`docs/screenshots/README.md`](docs/screenshots/README.md). A few of them:
+
+| | |
+|---|---|
+| ![Overview](docs/screenshots/02-intelligence-overview.png) | ![Map with Db2 hotspot cells](docs/screenshots/03-geographic-intelligence.png) |
+| *Intelligence overview: every figure is a Db2 aggregate* | *Geographic intelligence: OSM basemap, synthetic markers, hotspot cells* |
+| ![Investigation workspace after a run](docs/screenshots/20-investigation-run-result.png) | ![Human review](docs/screenshots/10-human-review-queue.png) |
+| *Workspace: the run says it was rule-based and why; audited tool calls; recommendations* | *Human review: provenance, evidence and the decision controls* |
+| ![Agent transparency](docs/screenshots/13-agent-transparency.png) | ![409 conflict](docs/screenshots/23-error-409-already-decided.png) |
+| *Agent transparency: no LLM configured, so nothing is called AI* | *A real 409: another reviewer decided first; nothing changed* |
+
+- **Recorded evidence:** [`docs/evidence/`](docs/evidence/) (Db2 smoke test, `pytest` against live Db2, API contract test, Playwright results, component tests, bundle scan, palette validation, LLM verification status).
 
 ## Known Limitations & Future Roadmap
 - **Synthetic data:** all demo complaints are fictional, generated by `scripts/generate_synthetic.py`, and stored with `IS_SYNTHETIC = 1` and the `[SYNTHETIC]` marker.
-- **Not implemented yet:** the React frontend, rate limiting, per-user token management / OIDC, and hosted deployment. The LLM loop exists but has not been exercised against a real provider.
+- **Not implemented:** rate limiting, per-user token management / OIDC, protection of the Phase 00 read endpoints (`GET /api/complaints`, `/api/hotspots` are public), hosted deployment, and the real-LLM run (**BLOCKED**: the loop is verified with a scripted test double, never with a real provider). Tokens are static. Do not expose this build publicly before closing those gaps.
+- **Dashboard:** dark theme only; no forced-colors / texture fallback for the charts; OpenStreetMap's public tile server is fine for a demo but not for production traffic.
 - **Duplicate text similarity** uses token Jaccard similarity. Phase 02 may add embeddings stored in Db2 (`VECTOR` type), after verifying feature support on the target edition.
-- See [`docs/PHASE_00_REPORT.md`](docs/PHASE_00_REPORT.md) for blockers and the next-phase plan.
+- See [`docs/PHASE_01B_REPORT.md`](docs/PHASE_01B_REPORT.md) for the Phase 01B findings, blockers and the remaining submission requirements, and [`docs/PHASE_00_REPORT.md`](docs/PHASE_00_REPORT.md) for the original plan.
 
 ## Team Members & Credits
 | Name | GitHub Handle | Role / Contribution |
 |---|---|---|
 | _To be completed by the team_ | [@tej-1916](https://github.com/tej-1916) | Lead developer |
 
-Third-party software: FastAPI (MIT), Pydantic (MIT), LangChain (MIT), Uvicorn (BSD-3), `ibm_db` (Apache-2.0), IBM Db2 Community Edition (IBM license, accepted at container start).
+Third-party software (backend): FastAPI (MIT), Pydantic (MIT), LangChain (MIT), Uvicorn (BSD-3), `ibm_db` (Apache-2.0), IBM Db2 Community Edition (IBM license, accepted at container start).
+
+Third-party software (dashboard; licences read from each package's own `package.json`): React, React DOM, React Router, TanStack Query, zod, Tailwind CSS, Vite, Vitest, MSW and Testing Library (MIT); Leaflet (BSD-2-Clause); lucide-react icons (ISC); Inter variable font via Fontsource (SIL OFL-1.1); TypeScript and Playwright (Apache-2.0); `@axe-core/playwright` (MPL-2.0, test-only). Map data © OpenStreetMap contributors (ODbL), shown with attribution on the map; tiles are loaded from the public OpenStreetMap tile server.

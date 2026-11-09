@@ -121,6 +121,14 @@ class Recommendation(BaseModel):
     review: ReviewDecision | None = None
 
 
+class RecommendationListItem(Recommendation):
+    """A recommendation plus the context a reviewer needs to triage it without extra requests."""
+
+    investigation_title: str
+    investigation_status: InvestigationStatus
+    investigation_created_by: str
+
+
 class DecisionRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 

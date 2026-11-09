@@ -64,6 +64,17 @@ class Settings(BaseSettings):
     # Unset => every investigation endpoint fails closed with 503.
     civiclens_auth_tokens: SecretStr | None = None
 
+    @field_validator("cors_origins")
+    @classmethod
+    def _validate_cors(cls, value: str) -> str:
+        """Only explicit scheme://host[:port] origins; a wildcard would defeat the point of CORS."""
+        for origin in (o.strip() for o in value.split(",") if o.strip()):
+            if "*" in origin:
+                raise ValueError("CORS_ORIGINS must list explicit origins; wildcards are not allowed.")
+            if not re.fullmatch(r"https?://[A-Za-z0-9.-]+(:\d{1,5})?", origin):
+                raise ValueError(f"Invalid CORS origin {origin!r}: expected scheme://host[:port] (no path).")
+        return value
+
     @field_validator("db2_schema")
     @classmethod
     def _validate_schema(cls, value: str) -> str:

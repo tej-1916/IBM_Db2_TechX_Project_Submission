@@ -1,4 +1,4 @@
-"""CivicLens AI HTTP API (Phase 00 skeleton)."""
+"""CivicLens AI HTTP API."""
 
 from __future__ import annotations
 
@@ -11,8 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from civiclens import __version__
+from civiclens.api.dashboard import router as dashboard_router
 from civiclens.api.deps import get_db
 from civiclens.api.investigations import router as investigations_router
+from civiclens.auth import Analyst, Principal
 from civiclens.config import get_settings
 from civiclens.db import repository as repo
 from civiclens.db.connection import Db2Session
@@ -28,14 +30,20 @@ from civiclens.domain.models import (
 
 logger = logging.getLogger("civiclens")
 DB = Annotated[Db2Session, Depends(get_db)]
+AnalystUser = Annotated[Principal, Analyst]
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    # Interactive docs and the OpenAPI schema describe the whole attack surface: development only.
+    docs = settings.app_env != "production"
     app = FastAPI(
         title="CivicLens AI",
         version=__version__,
         description="Urban infrastructure intelligence backed by IBM Db2.",
+        docs_url="/docs" if docs else None,
+        redoc_url="/redoc" if docs else None,
+        openapi_url="/openapi.json" if docs else None,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -44,25 +52,39 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
 
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):  # noqa: ANN001, ANN202
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        if request.url.path.startswith("/api/"):
+            response.headers.setdefault("Cache-Control", "no-store")  # authenticated data: never cache
+        return response
+
     @app.exception_handler(DomainError)
     async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.to_detail()})
 
+    app.include_router(dashboard_router)
     app.include_router(investigations_router)
 
     @app.get("/api/health", tags=["health"])
     def health() -> dict[str, str]:
-        """Liveness only; does not touch the database."""
-        return {"status": "ok", "version": __version__}
+        """Liveness only: no database access and no version or environment details."""
+        return {"status": "ok"}
 
     @app.get("/api/health/db", tags=["health"])
-    def health_db(db: DB) -> dict[str, object]:
-        """Runs a real query against IBM Db2."""
-        row = db.fetch_one("SELECT CURRENT TIMESTAMP AS NOW FROM SYSIBM.SYSDUMMY1")
-        return {"status": "ok", "server": db.server_info(), "db_time": str(row["now"]) if row else None}
+    def health_db(db: DB) -> dict[str, str]:
+        """Readiness: runs a real query against IBM Db2 but reveals nothing about it.
+
+        Operators get server details from the authenticated ``/api/overview``.
+        """
+        db.fetch_one("SELECT 1 AS OK FROM SYSIBM.SYSDUMMY1")
+        return {"status": "ok"}
 
     @app.post("/api/complaints", response_model=ComplaintCreated, status_code=201, tags=["complaints"])
-    def create_complaint(body: ComplaintCreate, db: DB) -> ComplaintCreated:
+    def create_complaint(user: AnalystUser, body: ComplaintCreate, db: DB) -> ComplaintCreated:
+        """Analyst-only. Complaint intake is authenticated so the evidence base cannot be flooded."""
         complaint_id = repo.insert_complaint(db, body)
         complaint = repo.get_complaint(db, complaint_id)
         assert complaint is not None
@@ -79,7 +101,7 @@ def create_app() -> FastAPI:
         repo.write_audit(
             db,
             actor_type="USER",
-            actor_id="api",
+            actor_id=user.user_id,
             action="COMPLAINT_CREATED",
             input_payload={"complaint_id": complaint_id, "category": complaint.category.value},
             output_summary=f"{len(candidates)} duplicate candidates",

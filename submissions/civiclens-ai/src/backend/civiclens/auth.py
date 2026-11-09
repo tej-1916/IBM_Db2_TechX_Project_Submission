@@ -28,6 +28,23 @@ MIN_TOKEN_LENGTH = 24
 
 _bearer = HTTPBearer(auto_error=False)
 
+# What each role may do. The UI reads this from /api/me instead of hardcoding role logic;
+# the endpoints enforce it independently with require_role().
+CAPABILITIES: dict[str, tuple[str, ...]] = {
+    "analyst": (
+        "complaint:create",
+        "investigation:create",
+        "evidence:attach",
+        "investigation:run",
+        "recommendation:propose",
+    ),
+    "reviewer": ("recommendation:decide",),
+}
+
+
+def capabilities_for(role: str) -> tuple[str, ...]:
+    return CAPABILITIES.get(role, ())
+
 
 @dataclass(frozen=True)
 class Principal:

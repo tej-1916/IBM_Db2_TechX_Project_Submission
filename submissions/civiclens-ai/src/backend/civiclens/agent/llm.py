@@ -12,6 +12,7 @@ Constructing a client does not contact the provider.
 
 from __future__ import annotations
 
+import importlib.util
 from dataclasses import dataclass
 from typing import Any
 
@@ -87,3 +88,45 @@ def build_llm(settings: Settings) -> LlmHandle | None:
             f"Provider package for {provider!r} is not installed (pip install -r requirements-llm.txt)."
         ) from exc
     return LlmHandle(model=model, provider=provider, model_name=model_name)
+
+
+_PROVIDER_PACKAGE = {
+    "openai": "langchain_openai",
+    "anthropic": "langchain_anthropic",
+    "watsonx": "langchain_ibm",
+}
+
+
+def llm_status(settings: Settings) -> dict[str, Any]:
+    """Non-secret description of the LLM configuration for operators.
+
+    ``configured`` means "``build_llm`` would succeed" (provider, model, credentials and package are
+    present). It does NOT mean the provider has been contacted or works.
+    """
+    provider = settings.llm_provider
+    if provider == "none":
+        return {"configured": False, "provider": "none", "model": None, "problem": None}
+    required: dict[str, Any] = {
+        "openai": {"OPENAI_API_KEY": settings.openai_api_key},
+        "anthropic": {"ANTHROPIC_API_KEY": settings.anthropic_api_key},
+        "watsonx": {
+            "WATSONX_APIKEY": settings.watsonx_apikey,
+            "WATSONX_PROJECT_ID": settings.watsonx_project_id,
+        },
+    }[provider]
+    problems: list[str] = []
+    if not settings.llm_model:
+        problems.append("LLM_MODEL is not set.")
+    for name, value in required.items():
+        raw = value.get_secret_value() if hasattr(value, "get_secret_value") else value
+        if not raw:
+            problems.append(f"{name} is not set.")
+    package = _PROVIDER_PACKAGE[provider]
+    if importlib.util.find_spec(package) is None:
+        problems.append(f"Package {package} is not installed.")
+    return {
+        "configured": not problems,
+        "provider": provider,
+        "model": settings.llm_model,
+        "problem": " ".join(problems) or None,
+    }

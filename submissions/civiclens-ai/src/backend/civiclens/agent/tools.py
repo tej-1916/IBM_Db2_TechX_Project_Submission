@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from civiclens.db import repository as default_repository
 from civiclens.domain.models import Category, ComplaintStatus
 
+TOOL_NAMES = ("search_complaints", "get_complaint", "find_duplicate_candidates", "hotspot_summary")
 MAX_TOOL_ROWS = 25
 MAX_RADIUS_M = 2000
 MAX_WINDOW_DAYS = 365
@@ -68,6 +69,18 @@ def _dump(obj: Any) -> Any:
     return obj
 
 
+def summarise_result(result: Any) -> str:
+    """One readable line for the audit log (never the full payload, which can include complaint text)."""
+    if isinstance(result, list):
+        return f"{len(result)} rows"
+    if isinstance(result, dict):
+        if result.get("found") is False:
+            return f"complaint #{result.get('complaint_id')} not found"
+        if isinstance(result.get("complaint_id"), int):
+            return f"complaint #{result['complaint_id']} ({result.get('category')}) returned"
+    return json.dumps(result, default=str)[:300]
+
+
 class CivicLensToolkit:
     """Builds audited LangChain tools bound to one Db2 session and investigation."""
 
@@ -102,9 +115,7 @@ class CivicLensToolkit:
                     success=False,
                 )
                 return {"ok": False, "error": f"{name} failed ({type(exc).__name__})."}
-            summary = (
-                f"{len(result)} rows" if isinstance(result, list) else json.dumps(result, default=str)[:300]
-            )
+            summary = summarise_result(result)
             self.repo.write_audit(
                 self.db,
                 actor_type="AGENT",

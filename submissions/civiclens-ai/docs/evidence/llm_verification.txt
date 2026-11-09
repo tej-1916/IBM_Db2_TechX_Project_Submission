@@ -1,0 +1,39 @@
+# Real-LLM verification: status BLOCKED (no provider credentials are configured for the application)
+# Checked 2026-11-09T16:51:21Z. Only variable NAMES are inspected here; no value is ever printed, logged or committed.
+
+## 1. Provider / model / key variables present in the shell that runs the tests (names only)
+   ANTHROPIC_BASE_URL
+   (ANTHROPIC_BASE_URL belongs to the sandbox's own gateway for the coding assistant, not to the application: no application provider, model or API key is set,
+    and it was deliberately NOT repurposed: making billable calls needs the operator's authorization.)
+
+## 2. The application's own settings file (variable names only)
+   DB2_HOST
+   DB2_PORT
+   DB2_DATABASE
+   DB2_USER
+   DB2_PASSWORD
+   DB2_SCHEMA
+   CIVICLENS_AUTH_TOKENS
+   LLM_PROVIDER / LLM_MODEL defined there: 0
+
+## 3. The running API process (variable names matching LLM / provider keys)
+   ANTHROPIC_BASE_URL
+
+## 4. What the API reports about itself (GET /api/overview -> system.llm, authenticated)
+   {'configured': False, 'provider': 'none', 'model': None, 'problem': None}
+
+## 5. The opt-in real-LLM test (tests/integration/test_llm_provider_live.py), run without opting in
+   s                                                                        [100%]
+   =========================== short test summary info ============================
+   SKIPPED [1] tests/integration/test_llm_provider_live.py:34: real-LLM test: set CIVICLENS_LLM_TESTS=1, LLM_PROVIDER, LLM_MODEL and the provider key
+   1 skipped in 0.29s
+
+## Conclusion
+   No provider, model or credential exists for the application, so NO real LLM investigation was run and no paid API call was made.
+   Everything the dashboard shows is therefore either rule-based ('Rule-based · no LLM', stored as DETERMINISTIC_FALLBACK) or analyst-written ('Manual · analyst-written', MANUAL).
+   The agent loop itself (allow-list, step limit, timeout, evidence grounding, auto-mode fallback with a stated reason) is verified with a scripted test double, which the UI labels 'Test double · not a real model'.
+
+## How to unblock (needs the operator's authorization: the call is billable)
+   pip install -r src/backend/requirements-llm.txt
+   CIVICLENS_DB2_TESTS=1 CIVICLENS_LLM_TESTS=1 LLM_PROVIDER=<openai|anthropic|watsonx> LLM_MODEL=<model> <provider key variables> pytest -m llm
+   then start the API with the same LLM_* variables and run one investigation in 'Auto' or 'LLM only' mode from the dashboard; the result, the recommendation cards and the transparency page will show provider:model.

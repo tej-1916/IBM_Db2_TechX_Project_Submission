@@ -31,6 +31,7 @@ from civiclens.domain.investigation_models import (
     InvestigationStatus,
     Recommendation,
     RecommendationDraft,
+    RecommendationListItem,
     RecommendationStatus,
     ReviewDecision,
 )
@@ -342,6 +343,68 @@ def list_recommendations(db: Db2Session, investigation_id: int) -> list[Recommen
     ):
         ev.setdefault(int(e["recommendation_id"]), []).append(int(e["complaint_id"]))
     return [_rec(r, ev.get(int(r["recommendation_id"]), [])) for r in rows]
+
+
+MAX_REC_LIST = 100
+
+
+def list_recommendations_all(
+    db: Db2Session,
+    *,
+    status: RecommendationStatus | None = None,
+    generator: GeneratorType | None = None,
+    investigation_id: int | None = None,
+    limit: int = 50,
+) -> list[RecommendationListItem]:
+    """Recommendations across investigations (pending first, then by priority), with context."""
+    limit = max(1, min(int(limit), MAX_REC_LIST))
+    clauses: list[str] = []
+    params: list[Any] = []
+    if status is not None:
+        clauses.append("R.STATUS = ?")
+        params.append(status.value)
+    if generator is not None:
+        clauses.append("R.GENERATOR_TYPE = ?")
+        params.append(generator.value)
+    if investigation_id is not None:
+        clauses.append("R.INVESTIGATION_ID = ?")
+        params.append(investigation_id)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = db.fetch_all(
+        """
+        SELECT R.RECOMMENDATION_ID, R.INVESTIGATION_ID, R.SUMMARY, R.RATIONALE, R.PRIORITY, R.CONFIDENCE,
+               R.GENERATOR_TYPE, R.MODEL_NAME, R.STATUS, R.CREATED_AT,
+               D.DECISION_ID, D.REVIEWER, D.DECISION, D.COMMENT, D.DECIDED_AT,
+               I.TITLE AS INVESTIGATION_TITLE, I.STATUS AS INVESTIGATION_STATUS,
+               I.CREATED_BY AS INVESTIGATION_CREATED_BY
+        FROM {schema}.RECOMMENDATIONS R
+        JOIN {schema}.INVESTIGATIONS I ON I.INVESTIGATION_ID = R.INVESTIGATION_ID
+        LEFT JOIN {schema}.REVIEW_DECISIONS D ON D.RECOMMENDATION_ID = R.RECOMMENDATION_ID
+        """
+        + where
+        + " ORDER BY CASE WHEN R.STATUS = 'PROPOSED' THEN 0 ELSE 1 END, R.PRIORITY, R.RECOMMENDATION_ID DESC"
+        + f" FETCH FIRST {limit} ROWS ONLY",
+        params,
+    )
+    if not rows:
+        return []
+    ids = [int(r["recommendation_id"]) for r in rows]
+    evidence: dict[int, list[int]] = {}
+    for e in db.fetch_all(
+        "SELECT RECOMMENDATION_ID, COMPLAINT_ID FROM {schema}.RECOMMENDATION_EVIDENCE "
+        f"WHERE RECOMMENDATION_ID IN ({', '.join('?' * len(ids))}) ORDER BY RECOMMENDATION_ID, COMPLAINT_ID",
+        ids,
+    ):
+        evidence.setdefault(int(e["recommendation_id"]), []).append(int(e["complaint_id"]))
+    return [
+        RecommendationListItem(
+            **_rec(r, evidence.get(int(r["recommendation_id"]), [])).model_dump(),
+            investigation_title=r["investigation_title"],
+            investigation_status=InvestigationStatus(r["investigation_status"]),
+            investigation_created_by=r["investigation_created_by"],
+        )
+        for r in rows
+    ]
 
 
 def get_recommendation(db: Db2Session, recommendation_id: int) -> Recommendation | None:

@@ -24,6 +24,8 @@ from civiclens.domain.investigation_models import (
     InvestigationStatus,
     Recommendation,
     RecommendationDraft,
+    RecommendationListItem,
+    RecommendationStatus,
     RunRequest,
     RunResult,
 )
@@ -36,7 +38,7 @@ ReviewerUser = Annotated[Principal, Reviewer]
 
 
 @router.post("/investigations", response_model=Investigation, status_code=201)
-def create_investigation(body: InvestigationCreate, db: DB, user: AnalystUser) -> Investigation:
+def create_investigation(user: AnalystUser, body: InvestigationCreate, db: DB) -> Investigation:
     return inv_repo.create_investigation(
         db, title=body.title, question=body.question, created_by=user.user_id
     )
@@ -44,8 +46,8 @@ def create_investigation(body: InvestigationCreate, db: DB, user: AnalystUser) -
 
 @router.get("/investigations", response_model=list[Investigation])
 def list_investigations(
-    db: DB,
     user: User,
+    db: DB,
     status: InvestigationStatus | None = None,
     limit: Annotated[int, Query(ge=1, le=inv_repo.MAX_LIST)] = 50,
 ) -> list[Investigation]:
@@ -53,19 +55,19 @@ def list_investigations(
 
 
 @router.get("/investigations/{investigation_id}", response_model=Investigation)
-def get_investigation(investigation_id: int, db: DB, user: User) -> Investigation:
+def get_investigation(investigation_id: int, user: User, db: DB) -> Investigation:
     return inv_repo.require_investigation(db, investigation_id)
 
 
 @router.get("/investigations/{investigation_id}/evidence", response_model=list[EvidenceItem])
-def get_evidence(investigation_id: int, db: DB, user: User) -> list[EvidenceItem]:
+def get_evidence(investigation_id: int, user: User, db: DB) -> list[EvidenceItem]:
     inv_repo.require_investigation(db, investigation_id)
     return inv_repo.list_evidence(db, investigation_id)
 
 
 @router.post("/investigations/{investigation_id}/evidence", response_model=list[EvidenceItem])
 def attach_evidence(
-    investigation_id: int, body: EvidenceCreate, db: DB, user: AnalystUser
+    investigation_id: int, body: EvidenceCreate, user: AnalystUser, db: DB
 ) -> list[EvidenceItem]:
     inv_repo.add_evidence(db, investigation_id, body.complaint_ids, note=body.note)
     return inv_repo.list_evidence(db, investigation_id)
@@ -74,8 +76,8 @@ def attach_evidence(
 @router.get("/investigations/{investigation_id}/audit", response_model=list[AuditEntry])
 def get_audit(
     investigation_id: int,
-    db: DB,
     user: User,
+    db: DB,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
 ) -> list[AuditEntry]:
     inv_repo.require_investigation(db, investigation_id)
@@ -83,7 +85,7 @@ def get_audit(
 
 
 @router.get("/investigations/{investigation_id}/recommendations", response_model=list[Recommendation])
-def get_recommendations(investigation_id: int, db: DB, user: User) -> list[Recommendation]:
+def get_recommendations(investigation_id: int, user: User, db: DB) -> list[Recommendation]:
     inv_repo.require_investigation(db, investigation_id)
     return inv_repo.list_recommendations(db, investigation_id)
 
@@ -92,7 +94,7 @@ def get_recommendations(investigation_id: int, db: DB, user: User) -> list[Recom
     "/investigations/{investigation_id}/recommendations", response_model=Recommendation, status_code=201
 )
 def propose_recommendation(
-    investigation_id: int, body: RecommendationDraft, db: DB, user: AnalystUser
+    investigation_id: int, body: RecommendationDraft, user: AnalystUser, db: DB
 ) -> Recommendation:
     """Manual proposal by an analyst. Same evidence validation as the agents; always PROPOSED."""
     with db.transaction():
@@ -117,7 +119,7 @@ def propose_recommendation(
 
 @router.post("/investigations/{investigation_id}/run", response_model=RunResult)
 def run_investigation(
-    investigation_id: int, db: DB, user: AnalystUser, body: RunRequest | None = None
+    investigation_id: int, user: AnalystUser, db: DB, body: RunRequest | None = None
 ) -> RunResult:
     return investigate.run_investigation(
         db,
@@ -128,8 +130,23 @@ def run_investigation(
     )
 
 
+@router.get("/recommendations", response_model=list[RecommendationListItem])
+def list_all_recommendations(
+    user: User,
+    db: DB,
+    status: RecommendationStatus | None = None,
+    generator: GeneratorType | None = None,
+    investigation_id: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int, Query(ge=1, le=inv_repo.MAX_REC_LIST)] = 50,
+) -> list[RecommendationListItem]:
+    """Reviewer queue and history across investigations (pending first, then by priority)."""
+    return inv_repo.list_recommendations_all(
+        db, status=status, generator=generator, investigation_id=investigation_id, limit=limit
+    )
+
+
 @router.get("/recommendations/{recommendation_id}", response_model=Recommendation)
-def get_recommendation(recommendation_id: int, db: DB, user: User) -> Recommendation:
+def get_recommendation(recommendation_id: int, user: User, db: DB) -> Recommendation:
     rec = inv_repo.get_recommendation(db, recommendation_id)
     if rec is None:
         raise NotFoundError("Recommendation not found.", code="RECOMMENDATION_NOT_FOUND")
@@ -138,7 +155,7 @@ def get_recommendation(recommendation_id: int, db: DB, user: User) -> Recommenda
 
 @router.post("/recommendations/{recommendation_id}/decision", response_model=Recommendation)
 def decide_recommendation(
-    recommendation_id: int, body: DecisionRequest, db: DB, user: ReviewerUser
+    recommendation_id: int, body: DecisionRequest, user: ReviewerUser, db: DB
 ) -> Recommendation:
     """Approve or reject. The reviewer is the authenticated principal, never a body field."""
     try:

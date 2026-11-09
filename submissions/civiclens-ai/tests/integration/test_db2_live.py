@@ -4,6 +4,7 @@ Enable with:  CIVICLENS_DB2_TESTS=1 DB2_PASSWORD=... pytest -m db2
 Rows created here are marked IS_SYNTHETIC=1 / SOURCE='PYTEST' and deleted afterwards.
 """
 
+import secrets
 import uuid
 from datetime import timedelta
 
@@ -12,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from civiclens.agent.tools import CivicLensToolkit
 from civiclens.api.main import create_app
+from civiclens.config import get_settings
 from civiclens.db import repository as repo
 from civiclens.db.connection import session
 from civiclens.db.migrate import migrate
@@ -127,22 +129,38 @@ def test_agent_tools_hit_db2_and_write_audit_rows(db):
     assert out["ok"]
     audit = repo.list_audit(db, investigation_id=inv)
     assert [a["tool_name"] for a in audit] == ["get_complaint", "hotspot_summary"]
+    assert (
+        audit[0]["output_summary"] == f"complaint #{cid} (STREETLIGHT) returned"
+    )  # readable, not a JSON dump
+    # AUDIT_LOG has no foreign key to INVESTIGATIONS, so clean both (no orphaned audit rows)
+    db.execute("DELETE FROM {schema}.AUDIT_LOG WHERE INVESTIGATION_ID = ?", (inv,))
     db.execute("DELETE FROM {schema}.INVESTIGATIONS WHERE INVESTIGATION_ID = ?", (inv,))
 
 
-def test_api_end_to_end(db):
+def test_api_end_to_end(db, monkeypatch):
+    # Phase 01B: complaint intake requires an analyst token and /api/health/db reveals nothing.
+    token = secrets.token_hex(16)
+    monkeypatch.setenv("CIVICLENS_AUTH_TOKENS", f"pytest-ana:analyst:{token}")
+    get_settings.cache_clear()  # the db fixture already cached settings
+    auth = {"Authorization": f"Bearer {token}"}
     client = TestClient(create_app())
     h = client.get("/api/health/db")
-    assert h.status_code == 200 and h.json()["server"]["dbms_name"].startswith("DB2")
+    assert h.status_code == 200 and h.json() == {"status": "ok"}
     payload = _complaint().model_dump(mode="json")
-    r = client.post("/api/complaints", json=payload)
+    assert client.post("/api/complaints", json=payload).status_code == 401  # anonymous intake is refused
+    r = client.post("/api/complaints", json=payload, headers=auth)
     assert r.status_code == 201
     cid = r.json()["complaint"]["complaint_id"]
-    r2 = client.post("/api/complaints", json=payload)
+    r2 = client.post("/api/complaints", json=payload, headers=auth)
     assert cid in [c["complaint_id"] for c in r2.json()["duplicate_candidates"]]
     assert client.get(f"/api/complaints/{cid}").json()["title"] == payload["title"]
     assert client.get("/api/complaints/999999999").status_code == 404
     assert client.get("/api/complaints", params={"category": "STREETLIGHT", "limit": 5}).status_code == 200
+    # the audit trail attributes intake to the authenticated user, not a hardcoded "api"
+    row = db.fetch_one(
+        "SELECT ACTOR_ID FROM {schema}.AUDIT_LOG WHERE ACTION = 'COMPLAINT_CREATED' ORDER BY AUDIT_ID DESC"
+    )
+    assert row["actor_id"] == "pytest-ana"
 
 
 def test_hotspots_over_seeded_synthetic_data(db):
