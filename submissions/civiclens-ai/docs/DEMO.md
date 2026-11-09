@@ -5,7 +5,7 @@
 
 ## The recording
 
-[`demo/civiclens-demo.mp4`](demo/civiclens-demo.mp4): a **silent, captioned screen recording** of the real application (1280×720, about 3½ minutes).
+[`demo/civiclens-demo.mp4`](demo/civiclens-demo.mp4): a **silent, captioned screen recording** of the real application (1280×720, 3 min 46 s, 4.4 MB).
 
 * The captions are text overlays added by the recording script (`src/frontend/e2e/demo.spec.ts`); they only describe what the app is doing at that moment.
 * **No credential is ever on screen.** The browser session is signed in off camera (the sign-in screen never appears, nothing is typed or pasted), and the app never renders a token. The file contains pixels only.
@@ -45,7 +45,7 @@ If the provider call itself fails (wrong key, unknown model, rate limit, network
 * **How is fabricated evidence prevented?** The orchestrator accepts a cited complaint only if a tool returned it in the same run; the API checks that evidence is attached; and Db2 refuses a recommendation–evidence link that is not attached to the same investigation.
 * **Can a model write SQL or approve anything?** No. There is no SQL tool and no write tool; recommendations are persisted by the orchestrator, always as `PROPOSED`; approval exists only on the reviewer endpoint.
 * **Can someone review their own investigation?** No: analysts and reviewers are different roles, the four-eyes rule is also enforced inside the transaction, and the reviewer identity comes from the token, never from the request body.
-* **What is not finished?** Real-LLM verification; protection of the read-only complaint and hotspot endpoints, rate limiting and real identity (OIDC) before any public deployment; a hosted demo. See the release report.
+* **What is not finished?** Real-LLM verification; protection of the read-only complaint and hotspot endpoints, rate limiting and real identity (OIDC) before any public deployment; a hosted demo. See [`PHASE_02_RELEASE_REPORT.md`](PHASE_02_RELEASE_REPORT.md).
 
 ## Slide outline (if slides are wanted)
 

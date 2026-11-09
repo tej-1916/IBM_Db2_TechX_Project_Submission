@@ -13,11 +13,11 @@ Legend: ✅ verified by a check that was actually run · 🧑 needs you (a decis
 | README follows the official template (14 sections) | ✅ | compared programmatically with `_template/README.md`: none missing |
 | `architecture.md` follows the template (7 sections) | ✅ | plus extra sections |
 | `submission.json` valid; required keys present | ✅ | official validator passes (`docs/evidence/submission_validator.txt`) |
-| CI check (`.github/workflows/validate-submission.yml`: runs `scripts/validate_submission.py` for **every** submission on PRs to `main`) | ✅ | passes on the official repo today (3 folders) and with ours added (dry run, section 4) |
+| CI check (`.github/workflows/validate-submission.yml`: runs `scripts/validate_submission.py` for **every** submission on PRs to `main`) | ✅ | passes on the official repo today (3 folders) and with ours added (dry run: [`evidence/fresh_clone_run.txt`](evidence/fresh_clone_run.txt)) |
 | Scope isolation: only `submissions/civiclens-ai/` changes | ✅ | 0 files outside the folder (`git diff --name-only main...HEAD`) |
 | No secrets or credentials committed; `.env.example` placeholders only | ✅ | repo secret scan 0 findings (4 literal secrets checked); bundle scan 0 findings; no `.env`/key files; `pip-audit` and `npm audit --omit=dev`: 0 known vulnerabilities |
 | Screenshots in `docs/screenshots/` | ✅ | 28 genuine captures + manifest (see `docs/screenshots/README.md`) |
-| Setup instructions tested from a fresh environment | ✅ | fresh-clone run (section 4 of the release report) |
+| Setup instructions tested from a fresh environment | ✅ | new clone of the official `main`, new virtualenv and `node_modules` ([`evidence/fresh_clone_run.txt`](evidence/fresh_clone_run.txt)) |
 | Third-party licences declared | ✅ | README, last section |
 | Team member name | ✅ / 🧑 | **Tej Sagar**, the public display name of the GitHub account `tej-1916` (verified through GitHub). Please confirm it is the name you want on the submission |
 | Team name | 🧑 | `CivicLens` is derived from the project name; nobody told me a different one. Confirm or change `team.name` in `submission.json` |
@@ -75,7 +75,7 @@ Tick only what is true for you when you open the PR.
 - [x] **Complete Documentation:** `README.md` and `architecture.md` complete, no unfilled markers (verified; note the open items in section 1).
 - [x] **Metadata File:** `submission.json` valid JSON, validator passes.
 - [x] **No Secrets or Credentials:** scans clean (see evidence); `.env.example` placeholders only.
-- [x] **Tested Setup Instructions:** run from a fresh clone (see the release report).
+- [x] **Tested Setup Instructions:** run from a fresh clone ([`evidence/fresh_clone_run.txt`](evidence/fresh_clone_run.txt)).
 - [ ] **License Declared:** 🧑 apply section 3, or state distribution terms another way.
 - [ ] **Code of Conduct:** 🧑 every member must agree.
 - [x] **Scope Isolation:** only `submissions/civiclens-ai/` (re-check with the command in step 4 below).
@@ -128,4 +128,4 @@ Then open the pull request **from** `tej-1916/IBM_Db2_TechX_Project_Submission` 
 
 ## 7. Time
 
-The brief's deadline is **10 November 2026, 5:00 PM IST (11:30 UTC)**. At the time of writing about 18 hours remain. The steps in sections 3 to 6 take about 15 minutes.
+The brief's deadline is **10 November 2026, 5:00 PM IST (11:30 UTC)**. At 18:10 UTC on 9 November roughly 17 hours remain. The steps in sections 3 to 6 take about 15 minutes.

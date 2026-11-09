@@ -2,7 +2,7 @@
 
 > **One-line pitch:** An agentic investigation platform for city infrastructure complaints. IBM Db2 stores every complaint, finds duplicates with in-database geo-distance queries, identifies hotspots, and keeps an auditable record of every AI tool call and human decision.
 
-> **Status: Phase 01B.** On top of the verified IBM Db2 + FastAPI backend there is now a React/TypeScript **intelligence dashboard**: overview, map (Leaflet + OpenStreetMap), complaint browser, investigation workspace, authenticated human review and an agent-transparency page. It was driven end to end in a real browser against the real backend and IBM Db2 (see [Testing](#testing--verification) and the [screenshots](docs/screenshots/README.md)). **The LLM path has still not been run against a real hosted model** (no provider credentials exist in this environment; verification is **BLOCKED**), so every recommendation is labelled `DETERMINISTIC_FALLBACK` or `MANUAL`, and the UI says "Rule-based · no LLM" wherever that is the case. See [`docs/PHASE_01B_REPORT.md`](docs/PHASE_01B_REPORT.md), [`docs/PHASE_01A_REPORT.md`](docs/PHASE_01A_REPORT.md) and [`docs/PHASE_00_REPORT.md`](docs/PHASE_00_REPORT.md).
+> **Status: Phase 02, ready to submit** (see [`docs/PHASE_02_RELEASE_REPORT.md`](docs/PHASE_02_RELEASE_REPORT.md)). On top of the verified IBM Db2 + FastAPI backend there is now a React/TypeScript **intelligence dashboard**: overview, map (Leaflet + OpenStreetMap), complaint browser, investigation workspace, authenticated human review and an agent-transparency page. It was driven end to end in a real browser against the real backend and IBM Db2 (see [Testing](#testing--verification) and the [screenshots](docs/screenshots/README.md)). **The LLM path has still not been run against a real hosted model** (no provider credentials exist in this environment; verification is **BLOCKED**), so every recommendation is labelled `DETERMINISTIC_FALLBACK` or `MANUAL`, and the UI says "Rule-based · no LLM" wherever that is the case. See [`docs/PHASE_01B_REPORT.md`](docs/PHASE_01B_REPORT.md), [`docs/PHASE_01A_REPORT.md`](docs/PHASE_01A_REPORT.md) and [`docs/PHASE_00_REPORT.md`](docs/PHASE_00_REPORT.md).
 
 ---
 
@@ -174,13 +174,14 @@ npm run build && npm run verify:bundle        # production build + "no secret or
 npm run e2e                                   # Playwright on the production build, real backend + Db2, axe-core, responsive
 npm run screenshots                           # regenerate docs/screenshots from the running app
 
-python ../../scripts/validate_submission.py .   # official validator (from repo root: submissions/civiclens-ai)
+# official validator: run from submissions/civiclens-ai inside a checkout of the official repository
+python ../../scripts/validate_submission.py .
 ```
 The integration and end-to-end tests use **no mocks** for Db2: they insert, query, aggregate, roll back and audit against the configured Db2 server, and the browser tests drive the production build against the real API. Recorded output from real runs is in [`docs/evidence/`](docs/evidence/): backend `pytest` against live Db2 (149 passed, 1 skipped: the real-LLM test), the live API contract test (8 passed), the Playwright run (63 passed) and the component tests (245 passed). The real-LLM run is **BLOCKED** (no credentials); see [`docs/evidence/llm_verification.txt`](docs/evidence/llm_verification.txt).
 
 ## Screenshots & Demo
 - **Live demo:** not deployed yet. Public deployment needs approval, a hosted Db2 instance and the hardening listed under *Known Limitations*.
-- **Demo video:** [`docs/demo/civiclens-demo.mp4`](docs/demo/civiclens-demo.mp4): a silent, captioned screen recording (about 4 minutes) of the real app, signed in off camera so no credential is ever on screen. It covers the problem, the Db2 architecture, hotspot detection, an investigation, provenance, human review with its audit trail, and the real-LLM versus fallback distinction. Narration script and talking points: [`docs/DEMO.md`](docs/DEMO.md). No language model was used for anything in it.
+- **Demo video:** [`docs/demo/civiclens-demo.mp4`](docs/demo/civiclens-demo.mp4): a silent, captioned screen recording (3 min 46 s) of the real app, signed in off camera so no credential is ever on screen. It covers the problem, the Db2 architecture, hotspot detection, an investigation, provenance, human review with its audit trail, and the real-LLM versus fallback distinction. Narration script and talking points: [`docs/DEMO.md`](docs/DEMO.md). No language model was used for anything in it.
 - **Screenshots:** 28 genuine captures from the running app (production build, real backend, real Db2, real OpenStreetMap tiles; synthetic data, labelled) are indexed in [`docs/screenshots/README.md`](docs/screenshots/README.md). A few of them:
 
 | | |
@@ -192,14 +193,14 @@ The integration and end-to-end tests use **no mocks** for Db2: they insert, quer
 | ![Agent transparency](docs/screenshots/13-agent-transparency.png) | ![409 conflict](docs/screenshots/23-error-409-already-decided.png) |
 | *Agent transparency: no LLM configured, so nothing is called AI* | *A real 409: another reviewer decided first; nothing changed* |
 
-- **Recorded evidence:** [`docs/evidence/`](docs/evidence/) (Db2 smoke test, `pytest` against live Db2, API contract test, Playwright results, component tests, bundle scan, palette validation, LLM verification status).
+- **Recorded evidence:** [`docs/evidence/`](docs/evidence/) (Db2 smoke test, `pytest` against live Db2, API contract test, Playwright results, component tests, bundle scan, palette validation, LLM verification status, dependency audit, endpoint authorization matrix, backend coverage and a from-scratch dry run of the submission procedure).
 
 ## Known Limitations & Future Roadmap
 - **Synthetic data:** all demo complaints are fictional, generated by `scripts/generate_synthetic.py`, and stored with `IS_SYNTHETIC = 1` and the `[SYNTHETIC]` marker.
 - **Not implemented:** rate limiting, per-user token management / OIDC, protection of the Phase 00 read endpoints (`GET /api/complaints`, `/api/hotspots` are public), hosted deployment, and the real-LLM run (**BLOCKED**: the loop is verified with a scripted test double, never with a real provider). Tokens are static. Do not expose this build publicly before closing those gaps.
 - **Dashboard:** dark theme only; no forced-colors / texture fallback for the charts; OpenStreetMap's public tile server is fine for a demo but not for production traffic.
 - **Duplicate text similarity** uses token Jaccard similarity. Phase 02 may add embeddings stored in Db2 (`VECTOR` type), after verifying feature support on the target edition.
-- See [`docs/PHASE_01B_REPORT.md`](docs/PHASE_01B_REPORT.md) for the Phase 01B findings, blockers and the remaining submission requirements, and [`docs/PHASE_00_REPORT.md`](docs/PHASE_00_REPORT.md) for the original plan.
+- See [`docs/PHASE_02_RELEASE_REPORT.md`](docs/PHASE_02_RELEASE_REPORT.md) for the release audit: what is verified, the security findings (including the open ones), the real-LLM status and the submission steps. See [`docs/PHASE_01B_REPORT.md`](docs/PHASE_01B_REPORT.md) for the Phase 01B findings, blockers and the remaining submission requirements, and [`docs/PHASE_00_REPORT.md`](docs/PHASE_00_REPORT.md) for the original plan.
 
 ## Team Members & Credits
 | Name | GitHub Handle | Role / Contribution |

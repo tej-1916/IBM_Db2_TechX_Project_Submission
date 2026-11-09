@@ -73,7 +73,7 @@
 - [x] **No Secrets or Credentials:** the repository secret scan (which checks the literal values of the real secrets) and a built-bundle scan report 0 findings; `.env.example` contains placeholders only.
 - [x] **Tested Setup Instructions:** run from a fresh clone (backend unit tests, frontend install/typecheck/lint/tests/build) and against a live Db2 (149 backend tests, 8 live API-contract tests, 63 browser tests).
 - [ ] **License Declared:** <!-- tick after adding a LICENSE (see docs/SUBMISSION_CHECKLIST.md) -->
-- [ ] **Code of Conduct:** all team members agree to the repository [Code of Conduct](../../CODE_OF_CONDUCT.md). <!-- tick yourself -->
+- [ ] **Code of Conduct:** all team members agree to the repository [Code of Conduct](https://github.com/KunalGolaIBM/IBM_Db2_TechX_Project_Submission/blob/main/CODE_OF_CONDUCT.md). <!-- tick yourself -->
 - [x] **Scope Isolation:** this PR only adds files inside `submissions/civiclens-ai/` and does not touch root files or other submissions.
 - [ ] **Google Form Submission:** I understand that opening this PR is step 1, and I will submit this PR URL into the official Google Form. <!-- tick yourself once done -->
 
@@ -81,7 +81,7 @@
 
 ## 7. Additional Notes for Reviewers & Judges
 
-- **Fastest check (no Db2 needed):** `cd submissions/civiclens-ai && pip install -r src/backend/requirements-dev.txt && pytest tests/unit` (111 tests) and `cd src/frontend && npm ci && npm test` (245 tests). With Db2: the commands in section 3, then `cd src/frontend && npm run build && npm run preview` and sign in with a token from `CIVICLENS_AUTH_TOKENS`.
+- **Fastest check (no Db2 needed):** `cd submissions/civiclens-ai && pip install -r src/backend/requirements-dev.txt && pytest tests/unit` (111 tests; 108 pass and 3 skip until the optional provider packages of `requirements-llm.txt` are installed) and `cd src/frontend && npm ci && npm test` (245 tests). With Db2: the commands in section 3, then `cd src/frontend && npm run build && npm run preview` and sign in with a token from `CIVICLENS_AUTH_TOKENS`.
 - **What is verified, against real services:** 149 backend tests on live Db2; 8 live API-contract tests; 63 Playwright tests on the production build (real backend and Db2: complaint browsing, investigation creation, evidence, the rule-based run, authenticated review with real 401/403/409/422/503 responses, axe-core accessibility, responsive checks); `pip-audit` and `npm audit --omit=dev` report no known vulnerabilities.
 - **Honesty about the AI part:** no real LLM was run (no credentials). The UI labels every recommendation with its stored author, and the *Agent transparency* page counts them (0 from a language model). The agent loop's failure handling was hardened during release preparation: a failing provider call now degrades to the labelled fallback in Auto mode instead of ending in a generic error.
 - **Known gaps:** the Phase 00 read endpoints (`GET /api/complaints`, `/api/hotspots`) are public; tokens are static and there is no rate limiting (do not expose publicly before real identity and rate limits); the TLS path to a hosted Db2 is untested.
