@@ -1,3 +1,7 @@
+import sys
+import types
+from pathlib import Path
+
 import pytest
 
 from civiclens.agent import fallback
@@ -47,6 +51,33 @@ def test_fallback_with_no_hotspots_returns_no_drafts():
     assert res.drafts == []
 
 
+@pytest.mark.parametrize(
+    ("provider", "module", "cls", "settings"),
+    [
+        ("openai", "langchain_openai", "ChatOpenAI", {"openai_api_key": "k"}),
+        ("anthropic", "langchain_anthropic", "ChatAnthropic", {"anthropic_api_key": "k"}),
+        ("watsonx", "langchain_ibm", "ChatWatsonx", {"watsonx_apikey": "k", "watsonx_project_id": "p"}),
+    ],
+)
+def test_a_client_that_cannot_be_created_is_a_config_error_naming_only_the_exception_class(
+    monkeypatch, provider, module, cls, settings
+):
+    """The watsonx client authenticates against IBM when it is created, so a wrong key fails right here. Whatever
+    the SDK raises must surface as LlmConfigError, never as a raw exception, and without the SDK's text."""
+
+    class Boom:
+        def __init__(self, **kwargs):
+            raise ConnectionError("401 Unauthorized for key sk-FAKE-0123456789")
+
+    fake = types.ModuleType(module)
+    setattr(fake, cls, Boom)
+    monkeypatch.setitem(sys.modules, module, fake)
+    with pytest.raises(LlmConfigError) as exc:
+        build_llm(Settings(_env_file=None, llm_provider=provider, llm_model="m", **settings))
+    assert "ConnectionError" in str(exc.value) and provider in str(exc.value)
+    assert "sk-FAKE" not in str(exc.value) and exc.value.__cause__ is None
+
+
 def test_llm_provider_none_returns_no_client():
     assert build_llm(Settings(_env_file=None)) is None
 
@@ -75,3 +106,50 @@ def test_client_construction_without_network(provider, key_field, cls):
         )
     )
     assert type(handle.model).__name__ == cls and handle.label == f"{provider}:test-model"
+
+
+SCRIPTS = Path(__file__).resolve().parents[2] / "src/backend/scripts"
+
+
+# ---- scripts/llm_preflight.py: a no-cost, no-network readiness check ------------------------------------------------
+def _preflight(monkeypatch, capsys, **settings):
+    import importlib
+
+    monkeypatch.syspath_prepend(str(SCRIPTS))
+    module = importlib.import_module("llm_preflight")
+    monkeypatch.setattr(module, "get_settings", lambda: Settings(_env_file=None, **settings))
+    code = module.main()
+    return code, capsys.readouterr().out
+
+
+def test_preflight_is_blocked_when_no_provider_is_selected(monkeypatch, capsys):
+    code, out = _preflight(monkeypatch, capsys)
+    assert (
+        code == 2
+        and "BLOCKED" in out
+        and "LLM_PROVIDER is 'none'" in out
+        and "Nothing is claimed to be AI" in out
+    )
+
+
+def test_preflight_lists_what_is_missing_without_printing_any_value(monkeypatch, capsys):
+    code, out = _preflight(
+        monkeypatch,
+        capsys,
+        llm_provider="watsonx",
+        llm_model="granite-test",
+        watsonx_apikey="sk-FAKE-0123456789",
+    )
+    assert code == 2 and "BLOCKED" in out and "WATSONX_PROJECT_ID is not set" in out
+    assert (
+        "sk-FAKE" not in out and "granite-test" in out
+    )  # the model name is configuration, a key is a secret
+
+
+def test_preflight_ready_never_claims_the_credentials_work(monkeypatch, capsys):
+    pytest.importorskip("langchain_openai")
+    code, out = _preflight(
+        monkeypatch, capsys, llm_provider="openai", llm_model="m", openai_api_key="sk-FAKE-0123456789"
+    )
+    assert code == 0 and "READY" in out and "NOT verified" in out and "explicit authorization" in out
+    assert "sk-FAKE" not in out

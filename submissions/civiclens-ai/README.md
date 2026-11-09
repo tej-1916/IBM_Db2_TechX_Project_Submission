@@ -132,7 +132,8 @@ Open the app and sign in with a token from `CIVICLENS_AUTH_TOKENS` (an `analyst`
 ### Choosing the investigator: real LLM or rule-based fallback
 * `LLM_PROVIDER=none` (default): `mode=auto` uses the **rule-based fallback**. Every result says `generator: DETERMINISTIC_FALLBACK` and `NO LLM WAS USED`; `mode=llm` returns `409 LLM_NOT_CONFIGURED` instead of silently falling back.
 * To use a real model: `pip install -r src/backend/requirements-llm.txt`, then set `LLM_PROVIDER` (`openai`, `anthropic` or `watsonx`), `LLM_MODEL` and the provider credentials in `.env`. Recommendations are then stored with `generator_type = LLM` and `model_name = provider:model`.
-* In `auto` mode, if the LLM run fails, the fallback is used and `fallback_reason` explains why.
+* In `auto` mode, if the LLM run fails (invalid output, ungrounded evidence, a timeout, or the provider itself failing: wrong key, unknown model, rate limit, network), the labelled fallback is used and `fallback_reason` says why (only the exception class is recorded, never the provider's message). `mode=llm` reports a 502 instead and the investigation can be retried.
+* **Readiness check without cost or network:** `python src/backend/scripts/llm_preflight.py` says whether a real provider *could* run (provider, model, credentials by name, package installed). It never contacts a provider; exit code 2 means BLOCKED.
 
 | Endpoint | Description |
 |---|---|
@@ -175,11 +176,11 @@ npm run screenshots                           # regenerate docs/screenshots from
 
 python ../../scripts/validate_submission.py .   # official validator (from repo root: submissions/civiclens-ai)
 ```
-The integration and end-to-end tests use **no mocks** for Db2: they insert, query, aggregate, roll back and audit against the configured Db2 server, and the browser tests drive the production build against the real API. Recorded output from real runs is in [`docs/evidence/`](docs/evidence/): backend `pytest` against live Db2 (138 passed, 1 skipped: the real-LLM test), the live API contract test (8 passed), the Playwright run (63 passed) and the component tests (245 passed). The real-LLM run is **BLOCKED** (no credentials); see [`docs/evidence/llm_verification.txt`](docs/evidence/llm_verification.txt).
+The integration and end-to-end tests use **no mocks** for Db2: they insert, query, aggregate, roll back and audit against the configured Db2 server, and the browser tests drive the production build against the real API. Recorded output from real runs is in [`docs/evidence/`](docs/evidence/): backend `pytest` against live Db2 (147 passed, 1 skipped: the real-LLM test), the live API contract test (8 passed), the Playwright run (63 passed) and the component tests (245 passed). The real-LLM run is **BLOCKED** (no credentials); see [`docs/evidence/llm_verification.txt`](docs/evidence/llm_verification.txt).
 
 ## Screenshots & Demo
 - **Live demo:** not deployed yet. Public deployment needs approval, a hosted Db2 instance and the hardening listed under *Known Limitations*.
-- **Demo video:** not recorded yet.
+- **Demo video:** [`docs/demo/civiclens-demo.mp4`](docs/demo/civiclens-demo.mp4): a silent, captioned screen recording (about 4 minutes) of the real app, signed in off camera so no credential is ever on screen. It covers the problem, the Db2 architecture, hotspot detection, an investigation, provenance, human review with its audit trail, and the real-LLM versus fallback distinction. Narration script and talking points: [`docs/DEMO.md`](docs/DEMO.md). No language model was used for anything in it.
 - **Screenshots:** 28 genuine captures from the running app (production build, real backend, real Db2, real OpenStreetMap tiles; synthetic data, labelled) are indexed in [`docs/screenshots/README.md`](docs/screenshots/README.md). A few of them:
 
 | | |
@@ -203,7 +204,7 @@ The integration and end-to-end tests use **no mocks** for Db2: they insert, quer
 ## Team Members & Credits
 | Name | GitHub Handle | Role / Contribution |
 |---|---|---|
-| _To be completed by the team_ | [@tej-1916](https://github.com/tej-1916) | Lead developer |
+| Tej Sagar | [@tej-1916](https://github.com/tej-1916) | Lead developer: Db2 integration, backend, investigation agent, dashboard |
 
 Third-party software (backend): FastAPI (MIT), Pydantic (MIT), LangChain (MIT), Uvicorn (BSD-3), `ibm_db` (Apache-2.0), IBM Db2 Community Edition (IBM license, accepted at container start).
 

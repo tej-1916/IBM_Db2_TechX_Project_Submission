@@ -132,10 +132,12 @@ def run_investigation(
                 loop.drafts = accepted
                 generator, model_name = GeneratorType.LLM, handle.label
             except AgentError as exc:
-                audit("LLM_RUN_FAILED", {"code": exc.code}, exc.message[:300], False)
+                reason = exc.details.get("reason")
+                audit("LLM_RUN_FAILED", {"code": exc.code, "reason": reason}, exc.message[:300], False)
                 if request.mode == "llm":
                     raise
-                fallback_reason = f"LLM run failed ({exc.code}); rule-based fallback used instead."
+                detail = f"{exc.code}: {reason}" if reason else exc.code
+                fallback_reason = f"LLM run failed ({detail}); rule-based fallback used instead."
                 loop = None
         elif request.mode == "auto":
             fallback_reason = config_problem or "No LLM provider configured (LLM_PROVIDER=none)."

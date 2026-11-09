@@ -7,13 +7,13 @@
     "category": "AI / Agents / Analytics",
     "demo_url": "",
     "video_url": "",
-    "repo_url": "https://github.com/tej-1916/IBM_Db2_TechX_Project_Submission/tree/feat/civiclens-phase01b/submissions/civiclens-ai"
+    "repo_url": "https://github.com/tej-1916/IBM_Db2_TechX_Project_Submission/tree/submission/civiclens-ai/submissions/civiclens-ai"
   },
   "team": {
     "name": "CivicLens",
     "members": [
       {
-        "name": "TODO: full name",
+        "name": "Tej Sagar",
         "github": "tej-1916",
         "email": "",
         "role": "Lead Developer"

@@ -344,6 +344,49 @@ def test_auto_mode_degrades_to_labelled_fallback_when_llm_fails(db):
     assert "INVALID_MODEL_OUTPUT" in res.fallback_reason and "NO LLM" in res.notice
 
 
+def _provider_down(msgs, n):
+    raise RuntimeError("Incorrect API key provided: sk-FAKE-0123456789")  # what a real SDK might say
+
+
+def test_auto_mode_degrades_to_labelled_fallback_when_the_provider_call_itself_fails(db):
+    """Wrong key / unknown model / rate limit / network errors come from the provider SDK, not from our validation.
+    Auto mode must still end in the labelled fallback, say why, and keep the SDK's text out of Db2."""
+    cluster(db, 6)
+    inv = new_inv(db)
+    res = investigate.run_investigation(
+        db, inv.investigation_id, requested_by=CREATOR, settings=get_settings(),
+        request=RunRequest(mode="auto", category=Category.TRAFFIC_SIGNAL, max_hotspots=1),
+        llm=handle_for(_provider_down))  # fmt: skip
+    assert res.generator is GeneratorType.DETERMINISTIC_FALLBACK and res.llm_configured is True
+    assert "LLM_PROVIDER_ERROR" in res.fallback_reason and "RuntimeError" in res.fallback_reason
+    assert "NO LLM" in res.notice
+    assert (
+        inv_repo.require_investigation(db, inv.investigation_id).status is InvestigationStatus.PENDING_REVIEW
+    )
+    audit = inv_repo.audit_history(db, inv.investigation_id)
+    failed = [a for a in audit if a.action == "LLM_RUN_FAILED"]
+    assert len(failed) == 1 and failed[0].success is False and "RuntimeError" in (failed[0].input_json or "")
+    assert not any("sk-FAKE" in f"{a.input_json} {a.output_summary} {res.fallback_reason}" for a in audit)
+    assert all(
+        r.generator_type is GeneratorType.DETERMINISTIC_FALLBACK
+        for r in inv_repo.list_recommendations(db, inv.investigation_id)
+    )  # nothing is claimed to be an LLM's
+
+
+def test_llm_only_mode_reports_a_provider_failure_and_the_investigation_can_be_retried(db):
+    inv = new_inv(db)
+    with pytest.raises(AgentError) as exc:
+        investigate.run_investigation(
+            db, inv.investigation_id, requested_by=CREATOR, settings=get_settings(),
+            request=RunRequest(mode="llm"), llm=handle_for(_provider_down))  # fmt: skip
+    assert exc.value.code == "LLM_PROVIDER_ERROR" and exc.value.status_code == 502
+    assert "sk-FAKE" not in exc.value.message and "sk-FAKE" not in json.dumps(exc.value.to_detail())
+    assert inv_repo.require_investigation(db, inv.investigation_id).status is InvestigationStatus.FAILED
+    assert inv_repo.list_recommendations(db, inv.investigation_id) == []  # nothing was stored
+    assert inv_repo.transition_status(db, inv.investigation_id, from_statuses=[InvestigationStatus.FAILED],
+                                      to_status=InvestigationStatus.OPEN)  # fmt: skip
+
+
 def test_runaway_agent_hits_step_limit_and_investigation_can_be_retried(db):
     inv = new_inv(db)
     loop = handle_for(lambda m, n: ai_calls(tool_call("hotspot_summary", {"days": 7}, f"c{n}")))

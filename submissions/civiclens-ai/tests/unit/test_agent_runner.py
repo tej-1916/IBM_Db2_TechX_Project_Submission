@@ -86,6 +86,21 @@ def test_invalid_tool_arguments_are_rejected_before_execution():
     assert spy.executed == [] and ("TOOL_ARGS_REJECTED", False) in audits
 
 
+def test_a_provider_failure_becomes_a_structured_error_that_does_not_leak_the_provider_text():
+    """Wrong key, unknown model, rate limit, network: whatever the SDK raises, the loop reports a coded error
+    naming only the exception class (the SDK's message can carry request details)."""
+
+    def responder(messages, n):
+        raise RuntimeError("Incorrect API key provided: sk-FAKE-0123456789")
+
+    with pytest.raises(AgentError) as exc:
+        run(responder)
+    assert exc.value.code == "LLM_PROVIDER_ERROR"
+    assert exc.value.details == {"reason": "RuntimeError"}
+    assert "sk-FAKE" not in str(exc.value) and "sk-FAKE" not in repr(exc.value.to_detail())
+    assert exc.value.__cause__ is None  # the original exception (and its text) is not chained either
+
+
 def test_step_limit_is_enforced():
     with pytest.raises(AgentStepLimitError) as exc:
         run(lambda m, n: ai_calls(tool_call("search_complaints", {}, f"c{n}")))

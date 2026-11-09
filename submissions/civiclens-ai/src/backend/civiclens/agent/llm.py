@@ -6,8 +6,10 @@ Supported providers (optional extras, see requirements-llm.txt):
   watsonx   -> langchain-ibm       ChatWatsonx    (WATSONX_APIKEY, WATSONX_PROJECT_ID, LLM_MODEL)
 
 ``build_llm`` returns ``None`` when LLM_PROVIDER is "none". It raises ``LlmConfigError`` (with a
-non-secret message) when a provider is selected but incomplete or its package is missing.
-Constructing a client does not contact the provider.
+non-secret message) when a provider is selected but incomplete, its package is missing, or the client
+cannot be created. Creating the OpenAI and Anthropic clients does not contact the provider; creating
+the watsonx client authenticates against IBM Cloud, so a wrong key or an unreachable endpoint fails
+here (as ``LlmConfigError``, naming only the exception class, never its text).
 """
 
 from __future__ import annotations
@@ -83,10 +85,17 @@ def build_llm(settings: Settings) -> LlmHandle | None:
             )
         else:  # pragma: no cover - guarded by the Literal type
             raise LlmConfigError(f"Unknown provider {provider!r}.")
+    except LlmConfigError:
+        raise
     except ImportError as exc:
         raise LlmConfigError(
             f"Provider package for {provider!r} is not installed (pip install -r requirements-llm.txt)."
         ) from exc
+    except Exception as exc:  # a provider SDK failure (authentication, network, bad parameters ...)
+        # The exception text can carry request details, so only its class is kept.
+        raise LlmConfigError(
+            f"The {provider!r} client could not be created ({type(exc).__name__})."
+        ) from None
     return LlmHandle(model=model, provider=provider, model_name=model_name)
 
 

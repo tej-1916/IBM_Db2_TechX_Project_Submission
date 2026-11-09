@@ -33,7 +33,7 @@ export default defineConfig({
   projects: [
     {
       name: 'functional',
-      testIgnore: /screenshots\.spec\.ts/,
+      testIgnore: /(screenshots|demo)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },
     {
@@ -46,6 +46,12 @@ export default defineConfig({
         deviceScaleFactor: 2,
         launchOptions: { executablePath, proxy },
       },
+    },
+    {
+      // A silent, captioned recording of the real app (e2e/demo.spec.ts). The spec makes its own context (video on, signed in off camera).
+      name: 'demo',
+      testMatch: /demo\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 }, launchOptions: { executablePath, proxy } },
     },
   ],
   webServer: process.env.E2E_NO_SERVER

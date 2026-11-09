@@ -145,7 +145,16 @@ def run_llm_loop(
         if clock() >= deadline:
             raise AgentTimeoutError("Agent exceeded its time budget.", steps=result.steps)
         result.steps = step
-        ai = bound.invoke(messages)
+        try:
+            ai = bound.invoke(messages)
+        except Exception as exc:
+            # Provider failure: bad key, unknown model, rate limit, network, content filter ...
+            # The exception text can carry request details, so only its class is kept (and audited).
+            raise AgentError(
+                "The language-model provider call failed.",
+                code="LLM_PROVIDER_ERROR",
+                reason=type(exc).__name__,
+            ) from None
         messages.append(ai)
         calls = list(getattr(ai, "tool_calls", None) or [])
         if not calls:
