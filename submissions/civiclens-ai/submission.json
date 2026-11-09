@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "project": {
+    "title": "CivicLens AI",
+    "slug": "civiclens-ai",
+    "short_description": "Agentic urban-infrastructure intelligence: complaint ingestion, duplicate detection, geo-temporal hotspot analysis, evidence-backed recommendations and human review, all persisted and computed in IBM Db2.",
+    "category": "AI / Agents / Analytics",
+    "demo_url": "",
+    "video_url": "",
+    "repo_url": "https://github.com/tej-1916/IBM_Db2_TechX_Project_Submission/tree/feat/civiclens-phase00/submissions/civiclens-ai"
+  },
+  "team": {
+    "name": "CivicLens",
+    "members": [
+      {
+        "name": "TODO: full name",
+        "github": "tej-1916",
+        "email": "",
+        "role": "Lead Developer"
+      }
+    ]
+  },
+  "ibm_db2": {
+    "edition": "Db2 Community Edition 12.1 (Docker); Db2 on Cloud planned for hosted demo",
+    "connector": "ibm_db (native Python driver)",
+    "features_used": [
+      "Relational tables with CHECK / FOREIGN KEY constraints",
+      "Identity columns with SELECT ... FROM FINAL TABLE (INSERT ...)",
+      "Secondary indexes for geo-cell and time-window queries",
+      "In-database haversine distance (SQL trig functions) for duplicate detection",
+      "GROUP BY / HAVING aggregation for hotspot analysis",
+      "Transactions with commit / rollback",
+      "Catalog-driven idempotent migrations (SYSCAT)",
+      "Append-only audit log table"
+    ]
+  },
+  "tech_stack": {
+    "languages": ["Python", "SQL", "TypeScript (planned)"],
+    "frameworks": ["FastAPI", "LangChain (langchain-core tools)", "Pydantic", "Pytest", "React + Vite + Tailwind (planned)"],
+    "ai_models": ["To be selected in Phase 01 (IBM watsonx.ai Granite preferred)"]
+  }
+}
