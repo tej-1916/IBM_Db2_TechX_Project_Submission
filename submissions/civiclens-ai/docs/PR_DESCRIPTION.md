@@ -37,7 +37,7 @@
   docker compose -f docker-compose.db2.yml up -d                # first start takes a few minutes
   pip install -r src/backend/requirements-dev.txt
   python src/backend/scripts/db2_migrate.py && python src/backend/scripts/seed_synthetic.py
-  CIVICLENS_DB2_TESTS=1 pytest                                  # 147 passed, 1 skipped (opt-in real-LLM test) against live Db2, no mocks
+  CIVICLENS_DB2_TESTS=1 pytest                                  # 149 passed, 1 skipped (opt-in real-LLM test) against live Db2, no mocks
   python src/backend/scripts/db2_smoke_test.py                  # real Db2 operations -> docs/evidence/
   ```
   Recorded output from real runs: `docs/evidence/`.
@@ -71,7 +71,7 @@
 - [x] **Complete Documentation:** `README.md` and `architecture.md` are filled out (all template sections), no unfilled placeholder markers.
 - [x] **Metadata File:** `submission.json` is complete and valid; `scripts/validate_submission.py` passes.
 - [x] **No Secrets or Credentials:** the repository secret scan (which checks the literal values of the real secrets) and a built-bundle scan report 0 findings; `.env.example` contains placeholders only.
-- [x] **Tested Setup Instructions:** run from a fresh clone (backend unit tests, frontend install/typecheck/lint/tests/build) and against a live Db2 (147 backend tests, 8 live API-contract tests, 63 browser tests).
+- [x] **Tested Setup Instructions:** run from a fresh clone (backend unit tests, frontend install/typecheck/lint/tests/build) and against a live Db2 (149 backend tests, 8 live API-contract tests, 63 browser tests).
 - [ ] **License Declared:** <!-- tick after adding a LICENSE (see docs/SUBMISSION_CHECKLIST.md) -->
 - [ ] **Code of Conduct:** all team members agree to the repository [Code of Conduct](../../CODE_OF_CONDUCT.md). <!-- tick yourself -->
 - [x] **Scope Isolation:** this PR only adds files inside `submissions/civiclens-ai/` and does not touch root files or other submissions.
@@ -81,8 +81,8 @@
 
 ## 7. Additional Notes for Reviewers & Judges
 
-- **Fastest check (no Db2 needed):** `cd submissions/civiclens-ai && pip install -r src/backend/requirements-dev.txt && pytest tests/unit` (110 tests) and `cd src/frontend && npm ci && npm test` (245 tests). With Db2: the commands in section 3, then `cd src/frontend && npm run build && npm run preview` and sign in with a token from `CIVICLENS_AUTH_TOKENS`.
-- **What is verified, against real services:** 147 backend tests on live Db2; 8 live API-contract tests; 63 Playwright tests on the production build (real backend and Db2: complaint browsing, investigation creation, evidence, the rule-based run, authenticated review with real 401/403/409/422/503 responses, axe-core accessibility, responsive checks); `pip-audit` and `npm audit --omit=dev` report no known vulnerabilities.
+- **Fastest check (no Db2 needed):** `cd submissions/civiclens-ai && pip install -r src/backend/requirements-dev.txt && pytest tests/unit` (111 tests) and `cd src/frontend && npm ci && npm test` (245 tests). With Db2: the commands in section 3, then `cd src/frontend && npm run build && npm run preview` and sign in with a token from `CIVICLENS_AUTH_TOKENS`.
+- **What is verified, against real services:** 149 backend tests on live Db2; 8 live API-contract tests; 63 Playwright tests on the production build (real backend and Db2: complaint browsing, investigation creation, evidence, the rule-based run, authenticated review with real 401/403/409/422/503 responses, axe-core accessibility, responsive checks); `pip-audit` and `npm audit --omit=dev` report no known vulnerabilities.
 - **Honesty about the AI part:** no real LLM was run (no credentials). The UI labels every recommendation with its stored author, and the *Agent transparency* page counts them (0 from a language model). The agent loop's failure handling was hardened during release preparation: a failing provider call now degrades to the labelled fallback in Auto mode instead of ending in a generic error.
 - **Known gaps:** the Phase 00 read endpoints (`GET /api/complaints`, `/api/hotspots`) are public; tokens are static and there is no rate limiting (do not expose publicly before real identity and rate limits); the TLS path to a hosted Db2 is untested.
 - **How it was built:** developed with an AI coding assistant under the participant's direction; every behaviour claimed here was checked by running the tests listed above. The full audit is in `submissions/civiclens-ai/docs/PHASE_02_RELEASE_REPORT.md`.

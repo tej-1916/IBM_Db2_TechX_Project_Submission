@@ -14,7 +14,7 @@ What it does
 • A React dashboard (map, investigation workspace, review queue, agent-transparency page) labels every recommendation with who actually wrote it: a real LLM, a rule-based fallback, or an analyst.
 
 Honest status
-I tested it against a live Db2 with no database mocks: 147 backend tests and 63 browser tests. I did **not** verify it with a real LLM: no provider credentials were available, so every recommendation in the demo is labelled "Rule-based · no LLM". All data is synthetic.
+I tested it against a live Db2 with no database mocks: 149 backend tests and 63 browser tests. I did **not** verify it with a real LLM: no provider credentials were available, so every recommendation in the demo is labelled "Rule-based · no LLM". All data is synthetic.
 
 Stack: IBM Db2 12.1 (`ibm_db`), Python and FastAPI, LangChain, React and TypeScript, Playwright. Built with an AI coding assistant; every claim above was checked by running the tests.
 

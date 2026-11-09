@@ -43,6 +43,19 @@ def test_fails_closed_when_auth_not_configured(monkeypatch):
     assert r.status_code == 503 and r.json()["detail"]["code"] == "AUTH_NOT_CONFIGURED"
 
 
+def test_a_misconfigured_server_fails_closed_without_naming_users_or_tokens(monkeypatch, caplog):
+    weak = "w3akT0ken"
+    with caplog.at_level("ERROR", logger="civiclens"):
+        r = _client(monkeypatch, f"alice:analyst:{weak}").get(
+            "/api/investigations", headers={"Authorization": f"Bearer {weak}"}
+        )
+    assert r.status_code == 503 and r.json()["detail"]["code"] == "AUTH_MISCONFIGURED"
+    assert "alice" not in r.text and weak not in r.text  # the caller learns nothing about the configuration
+    assert (
+        "alice" in caplog.text and weak not in caplog.text
+    )  # the operator can still see why (never the token)
+
+
 def test_missing_and_wrong_token_are_401(monkeypatch):
     c = _client(monkeypatch)
     assert c.get("/api/investigations").status_code == 401

@@ -13,6 +13,7 @@ This is deliberately simple (hackathon scope); production would use OIDC / IBM A
 from __future__ import annotations
 
 import hmac
+import logging
 import re
 from dataclasses import dataclass
 from typing import Annotated
@@ -21,6 +22,8 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from civiclens.config import Settings, get_settings
+
+logger = logging.getLogger("civiclens")
 
 ROLES = frozenset({"analyst", "reviewer"})
 _ID = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
@@ -89,8 +92,14 @@ def authenticate(token: str, settings: Settings) -> Principal | None:
     try:
         table = parse_tokens(settings.civiclens_auth_tokens.get_secret_value())
     except AuthConfigError as exc:
+        # The reason names a configured user id: operators read it in the log, callers get a generic body.
+        logger.error("Authentication is misconfigured: %s", exc)
         raise HTTPException(
-            status_code=503, detail={"code": "AUTH_MISCONFIGURED", "message": str(exc)}
+            status_code=503,
+            detail={
+                "code": "AUTH_MISCONFIGURED",
+                "message": "Authentication is misconfigured on the server.",
+            },
         ) from None
     found: Principal | None = None
     for known, principal in table.items():  # compare against every token: no early exit

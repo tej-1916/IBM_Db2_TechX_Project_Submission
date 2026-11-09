@@ -203,6 +203,30 @@ def test_failure_mid_decision_rolls_everything_back(db, monkeypatch):
     assert row["status"] == "PROPOSED" and n["n"] == 0
 
 
+def test_the_unique_index_is_a_database_backstop_and_rolls_back_the_status_flip(db):
+    """Simulates an application bypass: a decision row already exists for a PROPOSED recommendation. The
+    compare-and-set update passes, so only the unique index on REVIEW_DECISIONS stops the second decision; the
+    whole transaction, including the status flip, must roll back and leave no audit row."""
+    inv = new_inv(db)
+    rid = propose(db, inv.investigation_id, cluster(db, 3))
+    db.execute(
+        "INSERT INTO {schema}.REVIEW_DECISIONS (RECOMMENDATION_ID, REVIEWER, DECISION, COMMENT) "
+        "VALUES (?, ?, 'APPROVED', 'planted outside the application')",
+        (rid, REV2),
+    )
+    with pytest.raises(ConflictError) as exc:
+        inv_repo.decide(db, rid, reviewer=REV1, decision="REJECTED", comment="must not be stored")
+    assert exc.value.code == "ALREADY_DECIDED"
+    status = db.fetch_one("SELECT STATUS FROM {schema}.RECOMMENDATIONS WHERE RECOMMENDATION_ID = ?", (rid,))
+    assert status["status"] == "PROPOSED"  # the flip to REJECTED was rolled back with the failed insert
+    decisions = db.fetch_all(
+        "SELECT REVIEWER FROM {schema}.REVIEW_DECISIONS WHERE RECOMMENDATION_ID = ?", (rid,)
+    )
+    assert [d["reviewer"] for d in decisions] == [REV2]  # only the planted row
+    audit = inv_repo.audit_history(db, inv.investigation_id)
+    assert not [a for a in audit if a.action.startswith("REVIEW_")]  # the refused decision left no trace
+
+
 def test_concurrent_decisions_exactly_one_wins(db):
     rid = propose(db, new_inv(db).investigation_id, cluster(db, 3))
     barrier, outcomes = threading.Barrier(2), []
