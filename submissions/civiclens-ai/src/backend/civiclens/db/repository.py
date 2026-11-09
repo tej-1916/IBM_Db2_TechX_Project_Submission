@@ -117,6 +117,7 @@ def list_complaints(
     since: datetime | None = None,
     until: datetime | None = None,
     synthetic: bool | None = None,
+    geo_cell: str | None = None,
     limit: int = 50,
 ) -> list[Complaint]:
     clauses: list[str] = []
@@ -136,6 +137,9 @@ def list_complaints(
     if until is not None:
         clauses.append("REPORTED_AT < CAST(? AS TIMESTAMP)")
         params.append(_ts(until))
+    if geo_cell:
+        clauses.append("GEO_CELL = ?")
+        params.append(geo_cell)
     if synthetic is not None:
         clauses.append("IS_SYNTHETIC = ?")
         params.append(1 if synthetic else 0)

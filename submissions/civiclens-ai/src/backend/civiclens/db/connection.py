@@ -35,6 +35,7 @@ class Db2Session:
     def __init__(self, conn: Any, schema: str) -> None:
         self._conn = conn
         self.schema = schema
+        self._tx_depth = 0
 
     # -- SQL helpers ------------------------------------------------------------
     def sql(self, template: str) -> str:
@@ -76,7 +77,17 @@ class Db2Session:
     # -- transactions ------------------------------------------------------------
     @contextmanager
     def transaction(self) -> Iterator[Db2Session]:
+        """Run the block atomically. Re-entrant: only the outermost block commits/rolls back,
+        so repository functions can open their own ``transaction()`` and still compose."""
+        if self._tx_depth > 0:
+            self._tx_depth += 1
+            try:
+                yield self
+            finally:
+                self._tx_depth -= 1
+            return
         ibm_db.autocommit(self._conn, ibm_db.SQL_AUTOCOMMIT_OFF)
+        self._tx_depth = 1
         try:
             yield self
             ibm_db.commit(self._conn)
@@ -84,6 +95,7 @@ class Db2Session:
             ibm_db.rollback(self._conn)
             raise
         finally:
+            self._tx_depth = 0
             ibm_db.autocommit(self._conn, ibm_db.SQL_AUTOCOMMIT_ON)
 
     def server_info(self) -> dict[str, str]:
@@ -112,6 +124,10 @@ def connect(settings: Settings | None = None) -> Db2Session:
         raise Db2UnavailableError(
             f"Could not connect to {settings.redacted_target()}: {_safe_error(exc)}"
         ) from None
+    try:  # Db2's default is to wait forever on a lock; fail fast instead.
+        ibm_db.exec_immediate(conn, "SET CURRENT LOCK TIMEOUT 10")
+    except Exception:  # pragma: no cover - older servers
+        logger.warning("Could not set CURRENT LOCK TIMEOUT")
     return Db2Session(conn, settings.db2_schema)
 
 

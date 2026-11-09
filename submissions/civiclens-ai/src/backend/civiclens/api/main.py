@@ -6,14 +6,17 @@ import logging
 from datetime import timedelta
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from civiclens import __version__
 from civiclens.api.deps import get_db
+from civiclens.api.investigations import router as investigations_router
 from civiclens.config import get_settings
 from civiclens.db import repository as repo
 from civiclens.db.connection import Db2Session
+from civiclens.domain.errors import DomainError
 from civiclens.domain.models import (
     Category,
     Complaint,
@@ -38,8 +41,14 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "Authorization"],
     )
+
+    @app.exception_handler(DomainError)
+    async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.to_detail()})
+
+    app.include_router(investigations_router)
 
     @app.get("/api/health", tags=["health"])
     def health() -> dict[str, str]:

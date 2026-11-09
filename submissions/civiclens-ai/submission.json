@@ -7,7 +7,7 @@
     "category": "AI / Agents / Analytics",
     "demo_url": "",
     "video_url": "",
-    "repo_url": "https://github.com/tej-1916/IBM_Db2_TechX_Project_Submission/tree/feat/civiclens-phase00/submissions/civiclens-ai"
+    "repo_url": "https://github.com/tej-1916/IBM_Db2_TechX_Project_Submission/tree/feat/civiclens-phase01a/submissions/civiclens-ai"
   },
   "team": {
     "name": "CivicLens",
@@ -31,12 +31,30 @@
       "GROUP BY / HAVING aggregation for hotspot analysis",
       "Transactions with commit / rollback",
       "Catalog-driven idempotent migrations (SYSCAT)",
-      "Append-only audit log table"
+      "Append-only audit log table",
+      "Composite foreign key enforcing evidence integrity across tables",
+      "Unique index as a double-review backstop",
+      "Compare-and-set UPDATE for atomic state transitions",
+      "Multi-statement atomic review transaction with rollback",
+      "Per-connection CURRENT LOCK TIMEOUT"
     ]
   },
   "tech_stack": {
-    "languages": ["Python", "SQL", "TypeScript (planned)"],
-    "frameworks": ["FastAPI", "LangChain (langchain-core tools)", "Pydantic", "Pytest", "React + Vite + Tailwind (planned)"],
-    "ai_models": ["To be selected in Phase 01 (IBM watsonx.ai Granite preferred)"]
+    "languages": [
+      "Python",
+      "SQL",
+      "TypeScript (planned)"
+    ],
+    "frameworks": [
+      "FastAPI",
+      "LangChain (langchain-core tools)",
+      "Pydantic",
+      "Pytest",
+      "React + Vite + Tailwind (planned)"
+    ],
+    "ai_models": [
+      "Provider-agnostic via LangChain: OpenAI, Anthropic or IBM watsonx.ai (real-provider run pending credentials)",
+      "Labelled deterministic rule-based fallback (no LLM)"
+    ]
   }
 }

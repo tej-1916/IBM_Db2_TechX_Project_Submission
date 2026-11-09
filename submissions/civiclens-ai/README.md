@@ -2,7 +2,7 @@
 
 > **One-line pitch:** An agentic investigation platform for city infrastructure complaints. IBM Db2 stores every complaint, finds duplicates with in-database geo-distance queries, identifies hotspots, and keeps an auditable record of every AI tool call and human decision.
 
-> **Status: Phase 00 (foundation).** The backend, Db2 schema, Db2 data-access layer, secure LangChain tools and tests are working and have been verified against a live IBM Db2 12.1 server. The LLM agent loop, recommendations and review API, and the React dashboard are planned for later phases. See [`docs/PHASE_00_REPORT.md`](docs/PHASE_00_REPORT.md).
+> **Status: Phase 01A.** Investigation API, evidence-grounded recommendations, authenticated human review with atomic Db2 transactions, a bounded LangChain agent, and a clearly labelled rule-based fallback are implemented and verified against a live IBM Db2 12.1 server. **The LLM path has not yet been run against a real hosted model** (no credentials were available), so every recommendation produced so far is labelled `DETERMINISTIC_FALLBACK`. The React dashboard is planned for Phase 01B. See [`docs/PHASE_00_REPORT.md`](docs/PHASE_00_REPORT.md) and [`docs/PHASE_01A_REPORT.md`](docs/PHASE_01A_REPORT.md).
 
 ---
 
@@ -37,10 +37,13 @@ CivicLens AI combines a relational system of record in IBM Db2 with an AI invest
 | IBM Db2 schema, migrations, parameterized data access | ✅ Implemented, verified on Db2 |
 | Duplicate detection (Db2 haversine distance + time window + text similarity) | ✅ Implemented, verified on Db2 |
 | Geo-temporal hotspot analysis (Db2 `GROUP BY` geo-cell × category) | ✅ Implemented, verified on Db2 |
-| Investigation audit log | ✅ Table and writes verified; read API in Phase 01 |
+| Investigation audit log + read API | ✅ Verified on Db2 |
 | Secure LangChain tools | ✅ 4 read-only tools, verified on Db2 |
-| LLM agent loop and evidence-backed recommendations | ⏳ Phase 01 (schema already in place) |
-| Human review and decision tracking | ⏳ Phase 01 (schema already in place) |
+| Investigation API (create / get / evidence / audit / recommendations) | ✅ Verified on Db2 over HTTP |
+| Evidence-grounded recommendations (always `PROPOSED`) | ✅ Verified; fabricated ids rejected by the app **and** by Db2 constraints |
+| Human review: approve / reject, atomic, no double decisions, self-review blocked | ✅ Verified on Db2 incl. a concurrency test |
+| Bounded LangChain agent (allow-list, step limit, timeout) | ✅ Loop verified with a scripted test double; ⚠️ **not yet run against a real LLM provider** |
+| Rule-based fallback (labelled "NO LLM") | ✅ Verified on Db2 |
 | Interactive dashboard and map (React/Vite/Tailwind) | ⏳ Phase 01–02 |
 | Playwright end-to-end tests | ⏳ Phase 02 |
 
@@ -85,7 +88,9 @@ pip install -r src/backend/requirements-dev.txt
 ```bash
 cp .env.example .env                 # then set DB2_PASSWORD to a strong local password
 ```
-`.env` is gitignored. Every setting can also be supplied as a process environment variable.
+`.env` is gitignored. Every setting can also be supplied as a process environment variable, or via `CIVICLENS_ENV_FILE=/path/to/file`.
+
+> **Note:** the official `scripts/validate_submission.py` fails if any file named `.env` exists inside the submission folder, even an untracked one. Before running it, move your secrets file out (`CIVICLENS_ENV_FILE`) or delete it.
 
 > **Security warning:** never commit `.env`, real passwords or API keys.
 
@@ -95,14 +100,22 @@ cp .env.example .env                 # then set DB2_PASSWORD to a strong local p
 docker compose -f docker-compose.db2.yml up -d
 docker logs -f civiclens-db2         # wait for "(*) Setup has completed."
 
-# 2. Create the schema (idempotent) and load the SYNTHETIC demo dataset
+# 2. Create the schema (idempotent; also upgrades a Phase 00 database) and load the SYNTHETIC demo dataset
 python src/backend/scripts/db2_migrate.py
 python src/backend/scripts/seed_synthetic.py
 
-# 3. Run the API
+# 3. Run the API (needs CIVICLENS_AUTH_TOKENS in .env for the investigation endpoints)
 cd src/backend && uvicorn civiclens.api.main:app --port 8000
 # OpenAPI docs: http://localhost:8000/docs
+
+# 4. Drive the full workflow over HTTP (prints a transcript; never prints tokens)
+python scripts/api_workflow_demo.py
 ```
+
+### Choosing the investigator: real LLM or rule-based fallback
+* `LLM_PROVIDER=none` (default): `mode=auto` uses the **rule-based fallback**. Every result says `generator: DETERMINISTIC_FALLBACK` and `NO LLM WAS USED`; `mode=llm` returns `409 LLM_NOT_CONFIGURED` instead of silently falling back.
+* To use a real model: `pip install -r src/backend/requirements-llm.txt`, then set `LLM_PROVIDER` (`openai`, `anthropic` or `watsonx`), `LLM_MODEL` and the provider credentials in `.env`. Recommendations are then stored with `generator_type = LLM` and `model_name = provider:model`.
+* In `auto` mode, if the LLM run fails, the fallback is used and `fallback_reason` explains why.
 
 | Endpoint | Description |
 |---|---|
@@ -112,11 +125,22 @@ cd src/backend && uvicorn civiclens.api.main:app --port 8000
 | `GET /api/complaints` | Lists complaints, filtered by `category`, `status`, `ward`, `synthetic` and `limit` |
 | `GET /api/complaints/{id}` | Returns one complaint |
 | `GET /api/hotspots` | Geo-cell × category hotspots, filtered by `days`, `category`, `min_count` and `limit` |
+| `POST /api/investigations` | **analyst** · create an investigation |
+| `GET /api/investigations`, `GET /api/investigations/{id}` | any user · list / retrieve |
+| `GET /api/investigations/{id}/evidence` · `POST …/evidence` | any user read · **analyst** attach existing complaints |
+| `GET /api/investigations/{id}/audit` | any user · full audit history |
+| `GET /api/investigations/{id}/recommendations` · `POST …/recommendations` | any user read · **analyst** manual proposal |
+| `POST /api/investigations/{id}/run` | **analyst** · run the agent (`mode`: `auto` \| `llm` \| `fallback`) |
+| `POST /api/recommendations/{id}/decision` | **reviewer** · `APPROVED` / `REJECTED` (reviewer = authenticated user) |
+
+Authentication is a static bearer token per user (`Authorization: Bearer …`) configured through `CIVICLENS_AUTH_TOKENS`; the complaint and hotspot endpoints from Phase 00 remain public. See [`architecture.md`](architecture.md#authentication--authorization).
 
 ## Testing & Verification
 ```bash
 pytest                                        # unit tests (no database needed)
-CIVICLENS_DB2_TESTS=1 pytest                  # + live Db2 integration tests
+CIVICLENS_DB2_TESTS=1 pytest                  # + live Db2 integration tests (needs the .env settings exported)
+CIVICLENS_LLM_TESTS=1 CIVICLENS_DB2_TESTS=1 pytest -m llm   # billable real-LLM test (opt-in)
+python src/backend/scripts/check_secrets.py --literal-from-env   # committed-secret scan
 python src/backend/scripts/db2_smoke_test.py  # end-to-end Db2 evidence → docs/evidence/
 ruff check . && ruff format --check .
 python ../../scripts/validate_submission.py .   # official validator (from repo root: submissions/civiclens-ai)
@@ -130,7 +154,7 @@ The integration tests use **no mocks**: they insert, query, aggregate, roll back
 
 ## Known Limitations & Future Roadmap
 - **Synthetic data:** all demo complaints are fictional, generated by `scripts/generate_synthetic.py`, and stored with `IS_SYNTHETIC = 1` and the `[SYNTHETIC]` marker.
-- **Not implemented yet:** the LLM agent loop, recommendation and review endpoints, authentication, the frontend, and hosted deployment.
+- **Not implemented yet:** the React frontend, rate limiting, per-user token management / OIDC, and hosted deployment. The LLM loop exists but has not been exercised against a real provider.
 - **Duplicate text similarity** uses token Jaccard similarity. Phase 02 may add embeddings stored in Db2 (`VECTOR` type), after verifying feature support on the target edition.
 - See [`docs/PHASE_00_REPORT.md`](docs/PHASE_00_REPORT.md) for blockers and the next-phase plan.
 

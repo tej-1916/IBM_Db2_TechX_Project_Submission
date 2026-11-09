@@ -5,6 +5,7 @@ No credential has a usable default: DB2_PASSWORD must be provided by the environ
 
 from __future__ import annotations
 
+import os
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -14,7 +15,8 @@ from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # submissions/civiclens-ai/.env (gitignored); process env vars take precedence.
-_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+# CIVICLENS_ENV_FILE may point elsewhere (the official validator rejects a .env inside the folder).
+_ENV_FILE = Path(os.environ.get("CIVICLENS_ENV_FILE") or Path(__file__).resolve().parents[3] / ".env")
 _IDENTIFIER = re.compile(r"^[A-Z][A-Z0-9_]{0,29}$")
 
 
@@ -44,7 +46,23 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
 
     # --- AI (Phase 01+) ---------------------------------------------------------
-    llm_provider: Literal["none", "watsonx", "openai"] = "none"
+    llm_provider: Literal["none", "openai", "anthropic", "watsonx"] = "none"
+    llm_model: str | None = None  # required when llm_provider != "none"; never hardcoded
+    llm_timeout_s: int = Field(default=30, ge=1, le=300)  # per model request
+    openai_api_key: SecretStr | None = None
+    anthropic_api_key: SecretStr | None = None
+    watsonx_apikey: SecretStr | None = None
+    watsonx_project_id: str | None = None
+    watsonx_url: str = "https://us-south.ml.cloud.ibm.com"
+
+    # --- Agent limits ---------------------------------------------------------------
+    agent_max_steps: int = Field(default=6, ge=1, le=12)  # model/tool iterations
+    agent_timeout_s: int = Field(default=90, ge=5, le=600)  # whole-run wall clock
+
+    # --- Authentication --------------------------------------------------------------
+    # "id:role:token" entries, comma separated. role is "analyst" or "reviewer".
+    # Unset => every investigation endpoint fails closed with 503.
+    civiclens_auth_tokens: SecretStr | None = None
 
     @field_validator("db2_schema")
     @classmethod

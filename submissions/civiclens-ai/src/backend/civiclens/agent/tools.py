@@ -36,6 +36,9 @@ class SearchComplaintsArgs(BaseModel):
     category: Category | None = Field(default=None, description="Infrastructure category filter.")
     status: ComplaintStatus | None = Field(default=None, description="Complaint status filter.")
     ward: str | None = Field(default=None, max_length=64, description="Exact ward name.")
+    geo_cell: str | None = Field(
+        default=None, pattern=r"^C-?\d{1,6}_-?\d{1,6}$", description="Geo-cell id from hotspot_summary."
+    )
     days: int = Field(default=30, ge=1, le=MAX_WINDOW_DAYS, description="Look-back window in days.")
     limit: int = Field(default=10, ge=1, le=MAX_TOOL_ROWS)
 
@@ -117,12 +120,13 @@ class CivicLensToolkit:
         return runner
 
     # -- tool implementations ------------------------------------------------------
-    def _search(self, category=None, status=None, ward=None, days=30, limit=10):
+    def _search(self, category=None, status=None, ward=None, geo_cell=None, days=30, limit=10):
         return self.repo.list_complaints(
             self.db,
             category=category,
             status=status,
             ward=ward,
+            geo_cell=geo_cell,
             since=self.repo.utcnow() - timedelta(days=days),
             limit=min(limit, MAX_TOOL_ROWS),
         )

@@ -24,9 +24,13 @@
         "TABLE CIVICLENS.INVESTIGATIONS",
         "TABLE CIVICLENS.INVESTIGATION_EVIDENCE",
         "TABLE CIVICLENS.RECOMMENDATIONS",
+        "INDEX CIVICLENS.IX_REC_INV_STATUS",
+        "TABLE CIVICLENS.RECOMMENDATION_EVIDENCE",
         "TABLE CIVICLENS.REVIEW_DECISIONS",
+        "INDEX CIVICLENS.UX_DECISIONS_REC",
         "TABLE CIVICLENS.AUDIT_LOG",
-        "INDEX CIVICLENS.IX_AUDIT_INV_TIME"
+        "INDEX CIVICLENS.IX_AUDIT_INV_TIME",
+        "COLUMN CIVICLENS.RECOMMENDATIONS.GENERATOR_TYPE"
       ]
     },
     {
@@ -37,35 +41,36 @@
         "INVESTIGATIONS",
         "INVESTIGATION_EVIDENCE",
         "RECOMMENDATIONS",
+        "RECOMMENDATION_EVIDENCE",
         "REVIEW_DECISIONS"
       ]
     },
     {
       "step": "insert_and_read_back",
-      "complaint_id": 581,
+      "complaint_id": 1681,
       "geo_cell": "C5499_15535",
-      "reported_at": "2026-11-09 08:53:47.677374"
+      "reported_at": "2026-11-09 09:24:47.919930"
     },
     {
       "step": "duplicate_detection",
-      "query_id": 582,
+      "query_id": 1682,
       "candidates": [
         {
-          "complaint_id": 581,
+          "complaint_id": 1681,
           "title": "[SMOKE TEST] Synthetic pothole",
           "distance_m": 0.0,
           "text_similarity": 1.0,
           "score": 1.0
         },
         {
-          "complaint_id": 382,
+          "complaint_id": 142,
           "title": "Large pothole near bus stop",
           "distance_m": 76.5,
           "text_similarity": 0.125,
           "score": 0.4096
         },
         {
-          "complaint_id": 386,
+          "complaint_id": 146,
           "title": "Large pothole near bus stop",
           "distance_m": 102.2,
           "text_similarity": 0.125,
@@ -84,19 +89,19 @@
           "center_latitude": 27.495974,
           "center_longitude": 77.676233,
           "first_reported_at": "2026-11-08T17:00:00",
-          "last_reported_at": "2026-11-09T08:53:47.694918"
+          "last_reported_at": "2026-11-09T09:24:47.948204"
         }
       ]
     },
     {
       "step": "audit_write",
-      "audit_id": 221
+      "audit_id": 1641
     },
     {
       "step": "cleanup_transaction",
       "deleted_rows": 2
     }
   ],
-  "elapsed_seconds": 1.156,
+  "elapsed_seconds": 1.164,
   "result": "PASS"
 }

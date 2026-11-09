@@ -37,8 +37,27 @@ graph TD
 1. **Ingestion:** `POST /api/complaints` validates the payload, then computes `GEO_CELL` and `TEXT_FINGERPRINT`, then runs `INSERT` via `FINAL TABLE` to get the new id.
 2. **Duplicate check:** Db2 filters by category, status, an indexed bounding box and a ±14-day window, computes the exact haversine distance in SQL, and keeps rows within the radius. Python re-ranks them by text similarity. The candidates are returned to the caller.
 3. **Hotspots:** a Db2 `GROUP BY GEO_CELL, CATEGORY … HAVING COUNT(*) >= ?` over the requested window.
-4. **Investigation (Phase 01):** an investigation row is created, and the agent calls the tools. Each call writes an `AUDIT_LOG` row, and evidence links go to `INVESTIGATION_EVIDENCE`.
-5. **Recommendation and review (Phase 01):** the agent can only insert `RECOMMENDATIONS` with status `PROPOSED`. A human reviewer records the decision in `REVIEW_DECISIONS`, and that decision updates the recommendation status.
+4. **Investigation (Phase 01A):** an analyst creates an investigation (`OPEN`). `POST …/run` atomically claims it (`OPEN|FAILED → RUNNING`, a compare-and-set `UPDATE`), then runs the LLM agent or the rule-based fallback. Every tool call writes an `AUDIT_LOG` row.
+5. **Grounding and persistence:** drafts are accepted only if every cited complaint id was *returned by a tool in this run*. One Db2 transaction then attaches the cited complaints (`INVESTIGATION_EVIDENCE`), inserts `RECOMMENDATIONS` (status is the SQL literal `'PROPOSED'`), links `RECOMMENDATION_EVIDENCE`, writes audit rows and moves the investigation to `PENDING_REVIEW`.
+6. **Human review:** a reviewer approves or rejects through one Db2 transaction (see below). When no `PROPOSED` recommendation remains, the investigation becomes `CLOSED`.
+
+```text
+Investigation:  OPEN ─run→ RUNNING ─ok→ PENDING_REVIEW ─all decided→ CLOSED
+                  ▲           └─error→ FAILED ─(re-run)─┘             (no findings → CLOSED)
+Recommendation: PROPOSED ─reviewer→ APPROVED | REJECTED   (terminal)
+```
+
+### Review transaction (`investigation_repo.decide`)
+One transaction: (1) load the recommendation + investigation; (2) refuse if the reviewer created the investigation (four-eyes); (3) require status `PROPOSED` and investigation `PENDING_REVIEW`; (4) require the evidence links to still exist; (5) `UPDATE … SET STATUS=? WHERE STATUS='PROPOSED'` must change exactly one row; (6) insert the `REVIEW_DECISIONS` row; (7) write the audit row; (8) close the investigation if nothing is left to review. Any exception rolls all of it back. The unique index `UX_DECISIONS_REC` is the database-level backstop against double decisions, and `CURRENT LOCK TIMEOUT` is set to 10 s so concurrent writers fail fast.
+
+### Authentication & authorization
+* Bearer tokens, one per user, from `CIVICLENS_AUTH_TOKENS` (`id:role:token`, ≥ 24 chars, constant-time comparison). Not configured ⇒ `503` (fail closed); missing or wrong token ⇒ `401`; wrong role ⇒ `403`.
+* Roles: **analyst** (create, attach evidence, run, propose) and **reviewer** (approve / reject). The reviewer identity is the authenticated principal, never a request field (a body containing `reviewer` is rejected).
+* Rejected review attempts (self-review) are written to `AUDIT_LOG` as `REVIEW_DENIED`.
+* Known gap: Phase 00 complaint ingestion and read endpoints are still public, there is no rate limiting, and tokens are static. Production would use OIDC (for example IBM App ID) and per-user revocation.
+
+### Agent safety
+Tool allow-list, Pydantic-validated arguments, `AGENT_MAX_STEPS` iterations, an `AGENT_TIMEOUT_S` wall-clock deadline checked before every model and tool call, a per-request provider timeout, size-capped tool messages, strict JSON output validation (unknown keys such as a model-supplied `status` are dropped), and evidence grounding. Complaint text is untrusted input (prompt injection): the system prompt says so, and the blast radius is bounded because the model has no write tool and can only produce `PROPOSED` rows that a human must approve. The wall-clock deadline is cooperative: a single hung provider call is bounded by the provider request timeout, not interrupted.
 
 ## IBM Db2 Schema & Storage Design
 The full DDL is in [`src/backend/civiclens/db/schema.sql`](src/backend/civiclens/db/schema.sql). Summary:
@@ -50,6 +69,11 @@ COMPLAINTS (PK COMPLAINT_ID identity)
   IS_SYNTHETIC SMALLINT CHECK (0,1), REPORTED_AT, CREATED_AT
   IX (CATEGORY, REPORTED_AT) | IX (GEO_CELL, REPORTED_AT) | IX (TEXT_FINGERPRINT) | IX (STATUS, REPORTED_AT)
 
+RECOMMENDATION_EVIDENCE (PK REC_ID+COMPLAINT_ID; FK REC_ID -> RECOMMENDATIONS;
+   composite FK (INVESTIGATION_ID, COMPLAINT_ID) -> INVESTIGATION_EVIDENCE: Db2 refuses
+   evidence not attached to the same investigation)
+RECOMMENDATIONS also has GENERATOR_TYPE (LLM|DETERMINISTIC_FALLBACK|MANUAL|UNKNOWN) and
+   UNIQUE INDEX UX_DECISIONS_REC on REVIEW_DECISIONS(RECOMMENDATION_ID) prevents double review
 INVESTIGATIONS (PK INVESTIGATION_ID) -- status OPEN|RUNNING|PENDING_REVIEW|CLOSED|FAILED
 INVESTIGATION_EVIDENCE (PK INVESTIGATION_ID+COMPLAINT_ID, FKs cascade, RELEVANCE 0..1)
 RECOMMENDATIONS (PK, FK -> INVESTIGATIONS, CONFIDENCE 0..1, status PROPOSED|APPROVED|REJECTED|NEEDS_INFO)
@@ -81,7 +105,7 @@ SELECT * FROM NEARBY WHERE DISTANCE_M <= CAST(? AS DOUBLE) ORDER BY DISTANCE_M
 | `get_complaint` | `SELECT … WHERE COMPLAINT_ID = ?` | id ≥ 1 |
 | `find_duplicate_candidates` | haversine CTE (above) | radius ≤ 2000 m, window ≤ 90 days |
 | `hotspot_summary` | `GROUP BY GEO_CELL, CATEGORY` | ≤ 25 rows, min_count ≥ 2 |
-| `propose_recommendation` *(Phase 01)* | `INSERT` with status forced to `PROPOSED` | evidence ids must exist in the investigation |
+| *(no model-facing write tool)* | Recommendations are persisted by the orchestrator, never by a tool call | status is a SQL literal `'PROPOSED'`; evidence must be grounded |
 
 Rules:
 1. No free-form SQL tool exists, and the LLM output is never executed as SQL.

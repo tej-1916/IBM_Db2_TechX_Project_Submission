@@ -50,6 +50,47 @@ def _exists(db: Db2Session, kind: str, name: str | None = None) -> bool:
     return db.fetch_one(_CATALOG_SQL[kind], params) is not None
 
 
+# Column additions for databases created by an earlier phase (CREATE TABLE above already
+# contains these columns for fresh databases). (table, column, ADD COLUMN DDL tail)
+COLUMN_UPGRADES: list[tuple[str, str, str]] = [
+    (
+        "RECOMMENDATIONS",
+        "GENERATOR_TYPE",
+        "GENERATOR_TYPE VARCHAR(24) NOT NULL DEFAULT 'UNKNOWN'",
+    ),
+]
+
+
+def _column_exists(db: Db2Session, table: str, column: str) -> bool:
+    return (
+        db.fetch_one(
+            "SELECT 1 FROM SYSCAT.COLUMNS WHERE TABSCHEMA = ? AND TABNAME = ? AND COLNAME = ?",
+            (db.schema, table, column),
+        )
+        is not None
+    )
+
+
+def apply_column_upgrades(db: Db2Session) -> tuple[list[str], list[str]]:
+    """Add columns introduced after Phase 00 to pre-existing tables. Returns (skipped, added)."""
+    skipped: list[str] = []
+    added: list[str] = []
+    for table, column, ddl in COLUMN_UPGRADES:
+        label = f"COLUMN {db.schema}.{table}.{column}"
+        if not _table_exists(db, table):
+            continue  # a fresh CREATE TABLE (executed by migrate) already includes the column
+        if _column_exists(db, table, column):
+            skipped.append(label)
+            continue
+        db.execute_raw_ddl(f"ALTER TABLE {db.schema}.{table} ADD COLUMN {ddl}")
+        added.append(label)
+    return skipped, added
+
+
+def _table_exists(db: Db2Session, table: str) -> bool:
+    return _exists(db, "TABLE", table)
+
+
 def migrate(db: Db2Session) -> dict[str, list[str]]:
     """Create any missing schema objects. Returns created/skipped object names."""
     created: list[str] = []
@@ -64,4 +105,7 @@ def migrate(db: Db2Session) -> dict[str, list[str]]:
             continue
         db.execute_raw_ddl(db.sql(stmt.template))
         created.append(label)
+    col_skipped, col_added = apply_column_upgrades(db)
+    created += col_added
+    skipped += col_skipped
     return {"created": created, "skipped": skipped}
